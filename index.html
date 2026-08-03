@@ -870,6 +870,12 @@ function newOrder() {
   document.querySelector('.rc-photo-ph').style.display = '';
   setStatus('STANDBY');
   show('s-welcome');
+
+  // also tell the backend this order is fully wrapped up — otherwise if
+  // kitchen.html's tab ever gets refreshed after this point, it would see
+  // the still-"done" state from this finished order and immediately
+  // replay it, instead of sitting on its idle standby frame
+  fetch('/reset', { method: 'POST' }).catch(() => {});
 }
 
 // ── WELCOME ANIMATION ──
