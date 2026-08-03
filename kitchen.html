@@ -243,11 +243,6 @@ function randomPlatePos() {
 const PAGE_TURN_VIDEO_SRC = 'back1.mp4';
 const SKIP_PAGE_TURN = false;
 
-// how long the final dish-reveal image stays on screen after a show
-// finishes, before this display automatically returns to standby for the
-// next guest
-const HOLD_AFTER_COMPLETE_MS = 30000;
-
 // ── UTILS ─────────────────────────────────────────────────────
 const sleep    = ms => new Promise(r => setTimeout(r, ms));
 const setPhase = s  => document.getElementById('bar-phase').textContent = s;
@@ -417,6 +412,19 @@ async function playLoadingStage(videoSrc, isDone) {
   video.load();
   try { await video.play(); } catch {}
 
+  // jump the opacity between fixed steps (not a smooth fade) while looping
+  // — masks the visual seam where the loop restarts from frame 0, and
+  // makes the wait itself read as a deliberate pulse rather than a stuck
+  // loading loop. #show-video normally has a CSS opacity transition, so
+  // that's disabled for the duration of this pulse to keep the jumps sharp.
+  const OPACITY_STEPS = [0.3, 1, 0.5, 0.4];
+  let stepIdx = 0;
+  video.style.transition = 'none';
+  const pulseInterval = setInterval(() => {
+    video.style.opacity = OPACITY_STEPS[stepIdx % OPACITY_STEPS.length];
+    stepIdx++;
+  }, 300);
+
   // the backend retries image generation a few times on failure, but if it
   // still never succeeds, hasImage would never turn true — cap the wait so
   // a failed image can't hang the show here forever
@@ -426,6 +434,10 @@ async function playLoadingStage(videoSrc, isDone) {
     if (Date.now() - waitStart > MAX_IMAGE_WAIT_MS) break;
     await sleep(500);
   }
+
+  clearInterval(pulseInterval);
+  video.style.opacity = '';
+  video.style.transition = '';
 
   // reveal the actual generated dish image in place of the loading video,
   // and leave it up — this is the final beat, never falls back to the book
@@ -665,11 +677,20 @@ async function runShow(state) {
   setPhase('COMPLETE');
   await postPhase('done');
 
-  // hold the final reveal up for the guest, then automatically return to
-  // standby so the display is ready for the next guest without needing a
-  // manual page refresh — pollForOrder() won't re-trigger on this same
-  // order again since lastOrderTs already matches it
-  await sleep(HOLD_AFTER_COMPLETE_MS);
+  // hold the final reveal until the guest actually clicks FINISH/ORDER
+  // AGAIN on the ordering screen (which calls /reset there and flips
+  // status back to "idle" — see index.html newOrder()), with a 2-minute
+  // safety-net fallback in case that click never happens (guest just
+  // walks away) so this display doesn't get stuck showing an old order
+  // forever.
+  const MAX_REVEAL_HOLD_MS = 120000;
+  const revealStart = Date.now();
+  while (true) {
+    const s = await pollState();
+    if (s && s.status === 'idle') break;
+    if (Date.now() - revealStart > MAX_REVEAL_HOLD_MS) break;
+    await sleep(1000);
+  }
   pollForOrder();
 }
 
