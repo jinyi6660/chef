@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MYSTERY CHEF — KITCHEN</title>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #000;
+  }
+
+  #bg {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    width: 100%; height: 100%;
+    object-fit: contain;
+    object-position: center;
+    z-index: 0;
+  }
+
+  /* screen starts pure black — the paper book only appears once the
+     page-turn video has finished, revealed via .revealed */
+  #bg, #book {
+    opacity: 0;
+    transition: opacity 1.2s ease;
+  }
+  #bg.revealed, #book.revealed {
+    opacity: 1;
+  }
+
+  /* light scanline grain */
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9000;
+    background: repeating-linear-gradient(
+      0deg, rgba(0,0,0,0.025) 0px, rgba(0,0,0,0.025) 1px,
+      transparent 1px, transparent 3px
+    );
+  }
+
+  /* ── BOOK LAYOUT — aligned to back.jpg (4961×3508) ── */
+  #book {
+    position: fixed;
+    /* matches object-fit:contain scaling of back.jpg */
+    width: min(100vw, calc(100vh * 4961 / 3508));
+    height: min(100vh, calc(100vw * 3508 / 4961));
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+  }
+
+  /* full-book dark overlay, fades in with the reveal (0 -> 59% opacity) */
+  #dim-overlay {
+    position: absolute;
+    inset: 0;
+    background: #000;
+    opacity: 0;
+    transition: opacity 1.2s ease;
+    pointer-events: none;
+  }
+  #book.revealed #dim-overlay { opacity: 0.59; }
+
+  /* Left page ingredient zone — 6%→47% of book width, 5%→95% height */
+  #zone-ingr {
+    position: absolute;
+    left: 6%; top: 5%;
+    width: 41%;
+    bottom: 5%;
+    overflow: hidden;
+  }
+
+  /* plate mask — clips scattered tags/images to the plate shape only */
+  #plate-mask {
+    position: absolute;
+    inset: 0;
+    clip-path: polygon(76% 7%, 91% 10%, 98% 18%, 98% 42%, 96% 64%, 89% 78%, 70% 92%, 27% 74%, 17% 52%, 35% 23%);
+    pointer-events: none;
+  }
+
+  /* emotion tag labels */
+  .ingr-tag {
+    position: absolute;
+    font-family: 'Courier Prime', monospace;
+    font-size: clamp(11px, 1.5vw, 18px);
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: rgba(255,255,255,0.92);
+    text-shadow: 0 0 6px rgba(255,255,255,0.75), 0 0 14px rgba(255,255,255,0.4);
+    opacity: 0;
+    transition: opacity 1s ease;
+    white-space: nowrap;
+    pointer-events: none;
+    line-height: 1;
+  }
+  .ingr-tag.show { opacity: 1; }
+  .ingr-tag.typing::after {
+    content: '|';
+    margin-left: 1px;
+    animation: tag-blink 0.8s step-end infinite;
+  }
+  @keyframes tag-blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+  /* ── METHOD ZONE — AE overlay video (right page of back.jpg) ── */
+  #method-video-wrap {
+    position: absolute;
+    left: 53%; top: 5%;
+    width: 41.5%;
+    height: 90%;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  #method-video {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    /* source is 16:9 but this box is much taller/narrower — cover fills
+       the full page height and crops the sides, keeping a vertical slice
+       centered on where the text column actually sits (~76% across) */
+    object-fit: cover;
+    object-position: 76% top;
+    pointer-events: none;
+    /* subtle glow following the text's own silhouette (drop-shadow, not
+       box-shadow, so it hugs the letters rather than boxing the frame) */
+    filter: drop-shadow(0 0 5px rgba(255,255,255,0.65))
+            drop-shadow(0 0 12px rgba(255,255,255,0.35));
+  }
+
+  /* ── IDLE HINT ── */
+  #idle-hint {
+    position: fixed;
+    bottom: 40px; left: 50%; transform: translateX(-50%);
+    font-family: 'Courier Prime', monospace;
+    font-size: clamp(9px, 1vw, 13px);
+    letter-spacing: 0.5em;
+    color: rgba(22,14,6,0.22);
+    text-transform: uppercase;
+    z-index: 500;
+    animation: breathe 3.5s ease-in-out infinite;
+    transition: opacity 0.8s ease;
+  }
+  #idle-hint.hidden { opacity: 0; pointer-events: none; }
+  @keyframes breathe { 0%,100%{opacity:0.3} 50%{opacity:0.9} }
+
+  /* ── SHOW VIDEO OVERLAY (page-turn / cooking) ── */
+  #show-video {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 94%; height: 94%;
+    object-fit: cover; z-index: 800; background: #000;
+    opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
+  }
+  #show-video.on { opacity: 1; }
+
+  /* idle standby cover — a still snapshot of back1.mp4's opening frame,
+     shown instead of the paused <video> itself: pausing a <video> element
+     drops the painted frame back to black on this hardware/browser combo,
+     so a real frozen still has to be a plain <img>, not a paused video */
+  #idle-cover {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 94%; height: 94%;
+    object-fit: cover; z-index: 800; background: #000;
+    opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
+  }
+  #idle-cover.on { opacity: 1; }
+
+  /* final reveal — the actual generated dish image, shown in place of
+     the loading video once it's ready, and left up (not hidden again) */
+  #dish-reveal {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 94%; height: 94%;
+    object-fit: contain; z-index: 810; background: #000;
+    opacity: 0; pointer-events: none; transition: opacity 0.8s ease;
+  }
+  #dish-reveal.on { opacity: 1; }
+
+  /* ── STATUS BAR ── */
+  #bar {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 22px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 18px; z-index: 1000;
+    font-family: 'Courier Prime', monospace;
+    font-size: 8px; letter-spacing: 0.22em;
+    color: rgba(22,14,6,0.22); text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<img id="bg" src="back.jpg" alt="">
+
+<video id="show-video" muted playsinline></video>
+<img id="idle-cover" alt="">
+<img id="dish-reveal" alt="">
+<audio id="voice-audio"></audio>
+<audio id="relay-audio"></audio>
+
+<div id="book">
+  <div id="dim-overlay"></div>
+
+  <!-- INGREDIENT ZONE — left page of back.jpg -->
+  <div id="zone-ingr">
+    <div id="plate-mask"></div>
+  </div>
+
+  <!-- METHOD ZONE — AE overlay video -->
+  <div id="method-video-wrap">
+    <video id="method-video" autoplay muted playsinline>
+      <source src="2.webm" type="video/webm">
+      <source src="合成 2_4.mov" type="video/quicktime">
+    </video>
+  </div>
+</div>
+
+<span id="idle-hint">awaiting order</span>
+
+<div id="bar">
+  <span>MYSTERY CHEF</span>
+  <span id="bar-phase">STANDBY</span>
+  <span id="bar-clock">--:--:--</span>
+</div>
+
+<script>
+// ── EMOTION TAG placement (relative to #plate-mask, inside the plate) ───────
+// picks a random point inside a safe ellipse that stays clear of the
+// plate's clip-path edge, plus a random tilt
+function randomPlatePos() {
+  const cx = 57.5, cy = 49.5, rx = 32, ry = 34;
+  const angle = Math.random() * Math.PI * 2;
+  const r = Math.sqrt(Math.random()) * 0.85; // sqrt for even area coverage, 0.85 = margin from edge
+  const top    = cy + Math.sin(angle) * ry * r;
+  const left   = cx + Math.cos(angle) * rx * r;
+  const rotate = Math.round(-12 + Math.random() * 24);
+  return { top: `${top.toFixed(1)}%`, left: `${left.toFixed(1)}%`, rotate };
+}
+
+// back1.mp4 — the "digital file browser" video. It sits on screen as a
+// standby frame from the moment kitchen.html loads (whether or not an
+// order has come in yet), and only starts actually playing once a guest
+// submits — then it plays through once, before the paper book is revealed.
+const PAGE_TURN_VIDEO_SRC = 'back1.mp4';
+const SKIP_PAGE_TURN = false;
+
+// how long the final dish-reveal image stays on screen after a show
+// finishes, before this display automatically returns to standby for the
+// next guest
+const HOLD_AFTER_COMPLETE_MS = 30000;
+
+// ── UTILS ─────────────────────────────────────────────────────
+const sleep    = ms => new Promise(r => setTimeout(r, ms));
+const setPhase = s  => document.getElementById('bar-phase').textContent = s;
+
+setInterval(() => {
+  document.getElementById('bar-clock').textContent =
+    new Date().toTimeString().slice(0, 8);
+}, 1000);
+
+// ── RESET ─────────────────────────────────────────────────────
+function resetDisplay() {
+  document.getElementById('plate-mask').innerHTML = '';
+  document.getElementById('dish-reveal').classList.remove('on');
+}
+
+// ── IDLE ──────────────────────────────────────────────────────
+function setIdle(on) {
+  document.getElementById('idle-hint').classList.toggle('hidden', !on);
+}
+
+// ── STAGE (paper book) VISIBILITY ──────────────────────────────
+// screen is pure black until the page-turn video finishes; only then
+// does the physical book (back.jpg + plate/method overlays) fade in
+function hideStage() {
+  document.getElementById('bg').classList.remove('revealed');
+  document.getElementById('book').classList.remove('revealed');
+}
+function revealStage() {
+  document.getElementById('bg').classList.add('revealed');
+  document.getElementById('book').classList.add('revealed');
+  // method-video has `autoplay`, so it's been playing since page load —
+  // pause + rewind it now, and only actually start it once the book's own
+  // 1.2s opacity fade-in (see #bg, #book CSS transition) has finished.
+  // Starting it immediately meant the text animation was already a beat
+  // into playing while still invisible during the fade, so by the time
+  // the page was actually visible it looked like it was lagging to catch up.
+  const mv = document.getElementById('method-video');
+  mv.pause();
+  mv.currentTime = 0;
+  mv.playbackRate = 0.5;
+  setTimeout(() => {
+    mv.play().catch(() => {});
+  }, 1200);
+}
+
+// ── INGREDIENT TAGS ──────────────────────────────────────────
+async function typeTag(el, text) {
+  el.classList.add('show', 'typing');
+  for (const ch of text) {
+    el.textContent += ch;
+    await sleep(55);
+  }
+  el.classList.remove('typing');
+}
+
+async function showTags(tags) {
+  const zone = document.getElementById('plate-mask');
+  for (const tag of tags) {
+    const pos = randomPlatePos();
+    const el  = document.createElement('div');
+    el.className = 'ingr-tag';
+    // random size per tag — some words read bigger/smaller than others
+    const scale = 0.9 + Math.random() * 1.1; // 0.9x – 2.0x
+    const fontSize = `clamp(${(11 * scale).toFixed(1)}px, ${(1.5 * scale).toFixed(2)}vw, ${(18 * scale).toFixed(1)}px)`;
+    el.style.cssText =
+      `top:${pos.top}; left:${pos.left}; transform:rotate(${pos.rotate}deg); font-size:${fontSize};`;
+    zone.appendChild(el);
+    await typeTag(el, tag);
+    await sleep(250);
+  }
+}
+
+// ── POLL SERVER ──────────────────────────────────────────────
+async function pollState() {
+  try { const r = await fetch('/state'); return r.ok ? r.json() : null; }
+  catch { return null; }
+}
+
+// tells the backend which beat of the performance we're on — the
+// ordering screen (index.html) waits for this to reach "done" before
+// it reveals the receipt, instead of the raw generation status
+async function postPhase(phase) {
+  try {
+    await fetch('/phase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phase }),
+    });
+  } catch {}
+}
+
+// plays the per-order AI-waiter greeting line (TTS, generated on submit).
+// polls briefly since it's generated in the background and may not be
+// ready the instant the order comes in.
+async function playGreetingAudio() {
+  let d = null;
+  for (let i = 0; i < 10; i++) {
+    try { d = await fetch('/state/voice').then(r => r.json()); } catch {}
+    if (d && d.audio) break;
+    await sleep(600);
+  }
+  if (!d || !d.audio) return;
+  const audio = document.getElementById('voice-audio');
+  audio.src = 'data:audio/mpeg;base64,' + d.audio;
+  await new Promise(resolve => {
+    audio.addEventListener('ended', resolve, { once: true });
+    audio.play().catch(resolve);
+    setTimeout(resolve, 15000); // safety timeout if playback stalls
+  });
+}
+
+// ── COOKING STAGES ──────────────────────────────────────────
+// stage1-3 each play alongside one relay voice's audio, with playback
+// rate stretched/compressed so the video finishes exactly when that
+// voice's line finishes — not a fixed length. stage4 loops as a generic
+// "loading" beat until the dish image itself is actually ready.
+const STAGE_VIDEOS    = ['stage1.mp4', 'stage2.mp4', 'stage3.mp4'];
+const STAGE_DURATIONS = [8, 14.375, 10.458]; // each file's own natural length, seconds
+const LOADING_VIDEO   = 'stage4.mp4';
+
+async function playSyncedStage(videoSrc, naturalDuration, audioBase64) {
+  const video = document.getElementById('show-video');
+  const audio = document.getElementById('relay-audio');
+
+  video.src = videoSrc;
+  video.loop = false;
+  video.playbackRate = 1;
+  video.classList.add('on');
+  video.load();
+
+  if (!audioBase64) {
+    try { await video.play(); } catch {}
+    await sleep(naturalDuration * 1000);
+    video.classList.remove('on');
+    video.pause();
+    return;
+  }
+
+  audio.src = 'data:audio/mpeg;base64,' + audioBase64;
+  await new Promise(resolve => {
+    if (audio.readyState >= 1) return resolve();
+    audio.addEventListener('loadedmetadata', resolve, { once: true });
+    setTimeout(resolve, 3000);
+  });
+  const audioDuration = (audio.duration && isFinite(audio.duration)) ? audio.duration : naturalDuration;
+  // stretch/compress the video so it finishes exactly when the audio does
+  video.playbackRate = Math.max(0.25, Math.min(4, naturalDuration / audioDuration));
+
+  try { await video.play(); } catch {}
+  try { await audio.play(); } catch (err) { console.error('stage audio failed to play', err); }
+
+  await new Promise(resolve => {
+    audio.addEventListener('ended', resolve, { once: true });
+    setTimeout(resolve, (audioDuration + 2) * 1000);
+  });
+
+  video.classList.remove('on');
+  video.pause();
+  video.playbackRate = 1;
+}
+
+async function playLoadingStage(videoSrc, isDone) {
+  const video = document.getElementById('show-video');
+  video.src = videoSrc;
+  video.loop = true;
+  video.classList.add('on');
+  video.load();
+  try { await video.play(); } catch {}
+
+  // the backend retries image generation a few times on failure, but if it
+  // still never succeeds, hasImage would never turn true — cap the wait so
+  // a failed image can't hang the show here forever
+  const MAX_IMAGE_WAIT_MS = 90000;
+  const waitStart = Date.now();
+  while (!(await isDone())) {
+    if (Date.now() - waitStart > MAX_IMAGE_WAIT_MS) break;
+    await sleep(500);
+  }
+
+  // reveal the actual generated dish image in place of the loading video,
+  // and leave it up — this is the final beat, never falls back to the book
+  let imageData = null;
+  try {
+    const d = await fetch('/state/image').then(r => r.json());
+    imageData = d.image;
+  } catch {}
+
+  if (imageData) {
+    const reveal = document.getElementById('dish-reveal');
+    reveal.src = 'data:image/png;base64,' + imageData;
+    reveal.classList.add('on');
+  }
+
+  video.classList.remove('on');
+  video.loop = false;
+  video.pause();
+}
+
+async function playCookingStages() {
+  // relay runs before dish generation server-side, so lines should
+  // already be there by now — poll briefly just in case
+  let lines = [];
+  for (let i = 0; i < 10; i++) {
+    const d = await pollState();
+    lines = (d && d.relayLines) || [];
+    if (lines.length >= 3) break;
+    await sleep(500);
+  }
+  if (!lines.length) console.warn('playCookingStages: no relayLines yet in /state');
+
+  for (let i = 0; i < STAGE_VIDEOS.length; i++) {
+    const line = lines[i];
+    await playSyncedStage(STAGE_VIDEOS[i], STAGE_DURATIONS[i], line && line.audio);
+  }
+
+  await playLoadingStage(LOADING_VIDEO, async () => {
+    const d = await pollState();
+    return !!(d && d.hasImage);
+  });
+}
+
+// plays a full-screen video beat. Without loopUntil, waits for it to end
+// naturally (page-turn). With loopUntil, loops the video and polls the
+// given check function until it returns true (cooking, gated on the real
+// AI work actually finishing rather than a fixed video length).
+async function playShowVideo(src, { loopUntil, keepVisible } = {}) {
+  const video = document.getElementById('show-video');
+  video.src = src;
+  video.loop = !!loopUntil;
+  video.classList.add('on');
+  video.load();
+
+  // wait until the browser actually has enough data to play, instead of
+  // firing play() immediately (which can silently fail if the file is
+  // still buffering — this was likely why it worked sometimes and not
+  // others). Logs to console on failure so it's actually diagnosable.
+  try {
+    if (video.readyState < 3) {
+      await new Promise((resolve, reject) => {
+        video.addEventListener('canplay', resolve, { once: true });
+        video.addEventListener('error', reject, { once: true });
+        setTimeout(resolve, 8000); // don't block forever if it never fires
+      });
+    }
+    await video.play();
+  } catch (err) {
+    console.error('playShowVideo: failed to start', src, err);
+  }
+
+  if (loopUntil) {
+    while (!(await loopUntil())) await sleep(500);
+  } else {
+    // safety timeout scales with the video's own duration so long videos
+    // (e.g. 合成3, ~71s) don't get cut off by a fixed short timeout
+    const safetyMs = (video.duration && isFinite(video.duration))
+      ? video.duration * 1000 + 3000
+      : 90000;
+    await new Promise(resolve => {
+      video.addEventListener('ended', resolve, { once: true });
+      video.addEventListener('error', resolve, { once: true });
+      setTimeout(resolve, safetyMs);
+    });
+  }
+
+  if (!keepVisible) {
+    video.classList.remove('on');
+    video.loop = false;
+    video.pause();
+  }
+}
+
+// shows a still snapshot of back1.mp4 as the idle standby cover, visible
+// from page load before any order has come in. back1.mp4 itself fades in
+// from black over roughly its first second, so grabbing a frame too early
+// (verified via ffmpeg frame extraction: ~0.2-0.5s in is still black/near-
+// black) just captures that black intro — not a video-rendering bug. This
+// plays it briefly off-screen, waits past the fade-in, then snapshots the
+// live frame onto a canvas and displays THAT as a plain <img>.
+async function showIdlePageTurnFrame() {
+  const video = document.getElementById('show-video');
+  const cover = document.getElementById('idle-cover');
+  video.src = PAGE_TURN_VIDEO_SRC;
+  video.loop = false;
+  video.classList.remove('on'); // keep the actual video element hidden throughout
+  video.load();
+  try {
+    // this function is awaited by pollForOrder() before it starts polling
+    // for a real order — if video.play() itself never settles (seen on
+    // some browser/hardware combos), that would block polling forever, so
+    // give it a hard timeout rather than an unbounded await
+    await Promise.race([
+      video.play(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('play() timed out')), 3000)),
+    ]);
+    await sleep(1300); // past the ~1s fade-in from black
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    cover.src = canvas.toDataURL('image/jpeg', 0.85);
+    video.pause();
+    cover.classList.add('on');
+  } catch (err) {
+    console.error('idle standby frame failed to render', err);
+  }
+}
+
+// plays the page-turn video through from the start — swaps the static
+// idle-cover image back out for the real (playing) <video> element.
+async function playIdlePageTurn() {
+  document.getElementById('idle-cover').classList.remove('on');
+
+  const video = document.getElementById('show-video');
+  if (!video.src || !video.src.includes(PAGE_TURN_VIDEO_SRC)) {
+    video.src = PAGE_TURN_VIDEO_SRC;
+    video.load();
+  }
+  video.loop = false;
+  video.classList.add('on');
+  await new Promise(resolve => {
+    video.addEventListener('seeked', resolve, { once: true });
+    video.currentTime = 0;
+    setTimeout(resolve, 500); // don't block forever if 'seeked' never fires
+  });
+  try { await video.play(); } catch (err) { console.error('page-turn playback failed', err); }
+
+  const safetyMs = (video.duration && isFinite(video.duration))
+    ? video.duration * 1000 + 3000
+    : 90000;
+  await new Promise(resolve => {
+    video.addEventListener('ended', resolve, { once: true });
+    video.addEventListener('error', resolve, { once: true });
+    setTimeout(resolve, safetyMs);
+  });
+
+  video.classList.remove('on');
+  video.pause();
+}
+
+// tracks the order this display has already shown (or is showing), so
+// that looping back into standby after a show doesn't instantly re-trigger
+// on the same leftover "done" state — only a genuinely NEW order (a
+// different ts) starts the next show
+let lastOrderTs = null;
+
+async function pollForOrder() {
+  resetDisplay();
+  hideStage();
+  setIdle(true);
+  setPhase('STANDBY');
+  // must finish (and fully release the shared #show-video element) before
+  // polling starts — otherwise a fast-arriving order can call
+  // playIdlePageTurn() while this is still mid-snapshot, and the two race
+  // over the same <video> (this one's pause()/idle-cover re-add stomping
+  // on the playback playIdlePageTurn() just started)
+  await showIdlePageTurnFrame();
+  while (true) {
+    const s = await pollState();
+    if (s && s.ts !== lastOrderTs && (s.status === 'cooking' || s.status === 'done')) {
+      lastOrderTs = s.ts;
+      runShow(s); return;
+    }
+    await sleep(900);
+  }
+}
+
+// ── MAIN SHOW ────────────────────────────────────────────────
+async function runShow(state) {
+  resetDisplay();
+  hideStage();
+  setIdle(false);
+
+  // 1 — AI waiter announces the order (back1.mp4 still sitting on its
+  // standby frame from idle)
+  setPhase('GREETING');
+  await postPhase('greeting');
+  await playGreetingAudio();
+
+  // 2 — back1.mp4 now plays through from the start (was paused at idle)
+  setPhase('PAGE TURN');
+  await postPhase('pageturn');
+  if (!SKIP_PAGE_TURN) await playIdlePageTurn();
+
+  // now reveal the paper book — prompts + guest's input appear on it
+  revealStage();
+
+  // 3 — right page handled by the AE overlay video (method-video, looping
+  // already); left page grows the guest's own extracted words on the plate
+  setPhase('READING');
+  await postPhase('reading');
+  const readingStart = Date.now();
+  let cur = state;
+  while (!cur?.emotionTags?.length) {
+    await sleep(900); cur = await pollState() || cur;
+  }
+  await showTags(cur.emotionTags);
+
+  // hold the recipe page for at least this long, regardless of how fast
+  // the AI responds, so it never gets cut short mid-read
+  const MIN_READING_MS = 30000;
+  const readingElapsed = Date.now() - readingStart;
+  if (readingElapsed < MIN_READING_MS) await sleep(MIN_READING_MS - readingElapsed);
+
+  // 4 — once the method text video itself has finished playing, follow
+  // it with 合成3 in full (no cutting it short, no looping/conditions)
+  const mv = document.getElementById('method-video');
+  if (!mv.ended) {
+    await new Promise(resolve => mv.addEventListener('ended', resolve, { once: true }));
+  }
+  setPhase('COOKING');
+  await postPhase('cooking');
+  await playCookingStages();
+
+  // 5 — done; only now does the ordering screen's receipt unlock.
+  setPhase('COMPLETE');
+  await postPhase('done');
+
+  // hold the final reveal up for the guest, then automatically return to
+  // standby so the display is ready for the next guest without needing a
+  // manual page refresh — pollForOrder() won't re-trigger on this same
+  // order again since lastOrderTs already matches it
+  await sleep(HOLD_AFTER_COMPLETE_MS);
+  pollForOrder();
+}
+
+// ── DEMO — press T ───────────────────────────────────────────
+async function startDemo() {
+  const DEMO_TAGS = ['pink', 'sweet', 'birthday', 'warm', 'candle'];
+  resetDisplay();
+  hideStage();
+  setIdle(false);
+
+  // same standby-frame -> back1.mp4 -> reveal sequence as the real flow,
+  // no backend/API calls involved — press T anytime to iterate on this
+  setPhase('DEMO — PAGE TURN');
+  if (!SKIP_PAGE_TURN) await playIdlePageTurn();
+  revealStage();
+
+  setPhase('DEMO');
+  await sleep(800);
+  await showTags(DEMO_TAGS);
+
+  // once the method text video finishes, follow it with 合成3 in full
+  const mv = document.getElementById('method-video');
+  if (!mv.ended) {
+    await new Promise(resolve => mv.addEventListener('ended', resolve, { once: true }));
+  }
+  setPhase('DEMO — COOKING');
+  await playCookingStages();
+
+  setPhase('DEMO — COMPLETE');
+}
+
+window.addEventListener('keydown', e => {
+  if ((e.key === 't' || e.key === 'T') && e.target === document.body) startDemo();
+});
+
+pollForOrder();
+</script>
+</body>
+</html>
