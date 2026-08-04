@@ -51,9 +51,9 @@
 
   /* ── SCREENS ── */
   .screen { display: none; position: absolute; inset: 0; z-index: 10; }
-  .screen.on { display: flex; animation: screenIn 0.5s ease both; }
-  .screen.out { display: flex; animation: screenOut 0.3s ease both; pointer-events: none; }
-  @keyframes screenIn  { from{opacity:0} to{opacity:1} }
+  .screen.on { display: flex; animation: screenIn 0.45s cubic-bezier(.22,.61,.36,1) both; }
+  .screen.out { display: flex; animation: screenOut 0.45s cubic-bezier(.5,0,.75,.39) both; pointer-events: none; }
+  @keyframes screenIn  { from{opacity:0; transform:scale(0.99)} to{opacity:1; transform:none} }
   @keyframes screenOut { from{opacity:1} to{opacity:0} }
 
   /* ── WELCOME ── */
@@ -111,7 +111,7 @@
   }
   .napkin-title {
     position: absolute; z-index: 2;
-    top: 22%; left: 50%; transform: translateX(-50%);
+    top: 28%; left: 50%; transform: translateX(-50%);
     font-family: 'Cinzel Decorative', serif;
     font-size: clamp(14px, 4vw, 19px); letter-spacing: 0.14em;
     color: #1a1a1a; text-align: center; line-height: 1.5;
@@ -134,7 +134,8 @@
     bottom: 19%; right: 16%;
     font-family: 'Algerian', 'Cinzel Decorative', serif;
     font-size: min(5vw, 20px); letter-spacing: 0.1em;
-    color: #1200ff; background: none; border: none;
+    color: #fff; text-shadow: 0 0 8px rgba(255,255,255,0.75), 0 0 18px rgba(255,255,255,0.4);
+    background: none; border: none;
     cursor: pointer; transition: opacity 0.2s;
   }
   .cs-accept:hover { opacity: 0.7; }
@@ -143,7 +144,7 @@
     bottom: 19%; left: 24%;
     font-family: 'Algerian', 'Cinzel Decorative', serif;
     font-size: min(4vw, 14px); letter-spacing: 0.1em;
-    color: #1200ff; background: none; border: none;
+    color: rgba(120,120,120,0.4); background: none; border: none;
     cursor: pointer; transition: opacity 0.2s;
   }
   .cs-decline:hover { opacity: 0.7; }
@@ -273,17 +274,20 @@
   /* ── LOADING ── */
   #s-loading {
     flex-direction: column; justify-content: flex-start; align-items: flex-start;
-    padding: 80px 72px; background: var(--bg); position: relative;
+    padding: 80px 72px;
+    background: #000 url('cake.jpg') center center / cover no-repeat;
   }
   #s-loading::before {
     content: ''; position: absolute; inset: 0; pointer-events: none;
-    background: linear-gradient(rgba(107,159,255,0.02) 1px,transparent 1px),
+    background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)),
+                linear-gradient(rgba(107,159,255,0.02) 1px,transparent 1px),
                 linear-gradient(90deg,rgba(107,159,255,0.02) 1px,transparent 1px);
-    background-size: 48px 48px;
+    background-size: cover, 48px 48px, 48px 48px;
   }
   .ld-title {
-    font-family: var(--vt); font-size: 40px; color: var(--g);
-    text-shadow: 0 0 10px var(--g); margin-bottom: 28px; position: relative; z-index: 1;
+    font-family: var(--vt); font-size: 40px; color: #fff;
+    text-shadow: 0 0 10px rgba(255,255,255,0.75), 0 0 20px rgba(255,255,255,0.4);
+    margin-bottom: 28px; position: relative; z-index: 1;
   }
   .ld-cursor {
     display: inline-block; width: 7px; height: .85em;
@@ -292,11 +296,11 @@
   }
   .ld-line {
     font-family: var(--mono); font-size: 10px; letter-spacing: 0.28em;
-    color: rgba(107,159,255,.42); text-transform: uppercase;
+    color: rgba(255,255,255,.55); text-transform: uppercase;
     opacity: 0; transition: opacity .5s; margin-bottom: 14px; position: relative; z-index: 1;
   }
   .ld-line.on   { opacity: 1; }
-  .ld-line.done { color: rgba(107,159,255,.82); }
+  .ld-line.done { color: rgba(255,255,255,.92); }
 
   /* ── RECEIPT ── */
   #s-receipt {
@@ -540,12 +544,13 @@ function show(id) {
   document.querySelectorAll('.screen.on').forEach(s => {
     s.classList.add('out');
     s.classList.remove('on');
-    setTimeout(() => s.classList.remove('out'), 320);
+    setTimeout(() => s.classList.remove('out'), 450);
   });
-  setTimeout(() => {
-    void next.offsetWidth;
-    next.classList.add('on');
-  }, 150);
+  // start the new screen's fade-in at the same time as the old one's
+  // fade-out, instead of waiting for it to finish first — a synchronized
+  // crossfade reads as much smoother than a stagger-then-pop
+  void next.offsetWidth;
+  next.classList.add('on');
 }
 
 // ── TYPEWRITER ──
