@@ -111,7 +111,7 @@
   }
   .napkin-title {
     position: absolute; z-index: 2;
-    top: 28%; left: 50%; transform: translateX(-50%);
+    top: 18%; left: 50%; transform: translateX(-50%);
     font-family: 'Cinzel Decorative', serif;
     font-size: clamp(14px, 4vw, 19px); letter-spacing: 0.14em;
     color: #1a1a1a; text-align: center; line-height: 1.5;
@@ -134,8 +134,9 @@
     bottom: 19%; right: 16%;
     font-family: 'Algerian', 'Cinzel Decorative', serif;
     font-size: min(5vw, 20px); letter-spacing: 0.1em;
-    color: #fff; text-shadow: 0 0 8px rgba(255,255,255,0.75), 0 0 18px rgba(255,255,255,0.4);
-    background: none; border: none;
+    color: #1200ff;
+    background: rgba(18,0,255,0.08); border: 1px solid rgba(18,0,255,0.25);
+    padding: 6px 16px;
     cursor: pointer; transition: opacity 0.2s;
   }
   .cs-accept:hover { opacity: 0.7; }
@@ -144,7 +145,7 @@
     bottom: 19%; left: 24%;
     font-family: 'Algerian', 'Cinzel Decorative', serif;
     font-size: min(4vw, 14px); letter-spacing: 0.1em;
-    color: rgba(120,120,120,0.4); background: none; border: none;
+    color: #1200ff; background: none; border: none;
     cursor: pointer; transition: opacity 0.2s;
   }
   .cs-decline:hover { opacity: 0.7; }
@@ -304,22 +305,33 @@
 
   /* ── RECEIPT ── */
   #s-receipt {
-    background: var(--bg); flex-direction: column;
+    background: #000 url('cake.jpg') center center / cover no-repeat;
+    flex-direction: column;
     justify-content: flex-start; align-items: center;
-    padding: 60px 40px 80px; overflow-y: auto; position: relative;
+    padding: 24px 40px 20px;
+    overflow: hidden; /* the screen itself never scrolls — only .rc-scroll below does */
   }
   #s-receipt::before {
     content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
-    background: linear-gradient(rgba(107,159,255,0.02) 1px,transparent 1px),
+    background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)),
+                linear-gradient(rgba(107,159,255,0.02) 1px,transparent 1px),
                 linear-gradient(90deg,rgba(107,159,255,0.02) 1px,transparent 1px);
-    background-size: 48px 48px;
+    background-size: cover, 48px 48px, 48px 48px;
+  }
+  /* scrolls internally if the ticket content is tall — .rc-actions below
+     lives outside this, so FINISH/ORDER AGAIN stay pinned on screen and
+     visible without the guest ever needing to scroll or shrink the window */
+  .rc-scroll {
+    width: 100%; flex: 1; min-height: 0; overflow-y: auto;
+    display: flex; flex-direction: column; align-items: center;
+    position: relative; z-index: 1;
   }
   .rc-ticket {
     width: 100%; max-width: 360px;
     display: flex; flex-direction: column; align-items: center;
     position: relative; z-index: 1;
     border: 1px solid rgba(107,159,255,0.2); padding: 40px 32px 36px;
-    background: rgba(107,159,255,0.03); box-shadow: 0 0 24px rgba(107,159,255,.06);
+    background: rgba(255,255,255,0.8); box-shadow: 0 0 24px rgba(255,255,255,.35);
     animation: fadeIn .8s ease forwards;
   }
   .rc-shop { font-family: var(--vt); font-size: 36px; color: var(--g); text-shadow: 0 0 8px var(--g); text-align: center; margin-bottom: 28px; letter-spacing: .08em; }
@@ -342,7 +354,7 @@
   .rc-hdr>span:nth-child(3), .rc-row .ca { width:26px; flex-shrink:0; text-align:right; font-size:10px; color:var(--gd); }
   .rc-tax { display:flex; justify-content:space-between; font-size:9px; letter-spacing:.22em; color:var(--gd); text-transform:uppercase; margin:8px 0 22px; }
   .rc-dot { width:100%; border-top:1px dotted rgba(107,159,255,.15); margin-bottom:18px; }
-  .rc-actions { display:flex; flex-direction:column; align-items:center; gap:12px; margin-top:28px; position:relative; z-index:1; }
+  .rc-actions { display:flex; flex-direction:column; align-items:center; gap:10px; flex-shrink:0; padding-top:16px; position:relative; z-index:1; }
   .rc-btn { font-family:var(--mono); font-size:10px; letter-spacing:.22em; text-transform:uppercase; padding:11px 40px; cursor:pointer; transition:all .3s; background:transparent; border:1px solid rgba(107,159,255,.25); color:var(--g); }
   .rc-btn:hover { background:rgba(107,159,255,.06); border-color:var(--g); }
   .rc-btn.sec { border-color:transparent; color:var(--gd); font-size:9px; }
@@ -441,19 +453,21 @@
 
 <!-- ── RECEIPT ── -->
 <div class="screen" id="s-receipt">
-  <div class="rc-ticket">
-    <h2 class="rc-shop">MYSTERY CHEF</h2>
-    <div class="rc-photo-wrap">
-      <img id="rc-photo" src="" alt="">
-      <p class="rc-photo-ph">rendering moment</p>
+  <div class="rc-scroll">
+    <div class="rc-ticket">
+      <h2 class="rc-shop">MYSTERY CHEF</h2>
+      <div class="rc-photo-wrap">
+        <img id="rc-photo" src="" alt="">
+        <p class="rc-photo-ph">rendering moment</p>
+      </div>
+      <div class="rc-dash"></div>
+      <div class="rc-items">
+        <div class="rc-hdr"><span>QTY</span><span>ITEM</span><span>AMT</span></div>
+        <div id="rc-list"></div>
+      </div>
+      <div class="rc-tax"><span>****</span><span>TOTAL</span><span id="rc-total">—</span></div>
+      <div class="rc-dot"></div>
     </div>
-    <div class="rc-dash"></div>
-    <div class="rc-items">
-      <div class="rc-hdr"><span>QTY</span><span>ITEM</span><span>AMT</span></div>
-      <div id="rc-list"></div>
-    </div>
-    <div class="rc-tax"><span>****</span><span>TOTAL</span><span id="rc-total">—</span></div>
-    <div class="rc-dot"></div>
   </div>
   <div class="rc-actions">
     <button class="rc-btn" onclick="newOrder()">ORDER AGAIN</button>
