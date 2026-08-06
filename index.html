@@ -373,6 +373,11 @@
 <body>
 <div id="app">
 
+<!-- plays the kitchen display's greeting + relay voices on this phone too,
+     so headphones plugged in here can hear the kitchen performance even
+     though the mini PC inside the oven prop has no headphone access -->
+<audio id="kitchen-audio"></audio>
+
 <div id="statusbar">
   <span>MYSTERY CHEF v3.0</span>
   <span id="st-label">STANDBY</span>
@@ -778,9 +783,96 @@ async function triggerBuild() {
   setStatus('PROCESSING');
   show('s-loading');
   startLoadingAnim();
+  resetKitchenAudioMirror();
 
   await submitBuildWithRetry();
   pollUntilDone();
+}
+
+// ── KITCHEN AUDIO MIRROR ──
+// mini PC inside the oven prop has no headphone access, so this phone
+// (which does) plays the same greeting + relay voices in parallel, driven
+// by the same /state polling already used to wait for showPhase. Not
+// frame-synced to kitchen.html's video — just triggered by the same phase
+// data, close enough since this phone has no video to keep in lockstep with.
+//
+// Greeting order matters: fetching it is a separate async request
+// (/state/voice), while relay lines arrive synchronously inside /state.
+// If relay lines are queued as soon as they're seen, they'd win that race
+// every time and the greeting would play last instead of first — so relay
+// lines are held back until the greeting is either fetched or confirmed
+// absent/timed-out.
+let _mirrorGreetingState = 'pending'; // 'pending' | 'fetching' | 'resolved'
+let _mirrorRelayPlayed = 0;
+let _mirrorQueue = [];
+let _mirrorPlaying = false;
+let _mirrorStartTime = 0;
+const MIRROR_GREETING_TIMEOUT_MS = 10000;
+
+function resetKitchenAudioMirror() {
+  _mirrorGreetingState = 'pending';
+  _mirrorRelayPlayed = 0;
+  _mirrorQueue = [];
+  _mirrorPlaying = false;
+  _mirrorStartTime = Date.now();
+  const audio = document.getElementById('kitchen-audio');
+  audio.pause();
+  audio.src = '';
+}
+
+function queueMirrorAudio(base64) {
+  _mirrorQueue.push(base64);
+  playNextMirrorAudio();
+}
+
+async function playNextMirrorAudio() {
+  if (_mirrorPlaying || !_mirrorQueue.length) return;
+  _mirrorPlaying = true;
+  const base64 = _mirrorQueue.shift();
+  const audio = document.getElementById('kitchen-audio');
+  audio.src = 'data:audio/mpeg;base64,' + base64;
+  await new Promise(resolve => {
+    audio.addEventListener('ended', resolve, { once: true });
+    audio.play().catch(resolve);
+    setTimeout(resolve, 20000); // safety timeout if playback stalls
+  });
+  _mirrorPlaying = false;
+  playNextMirrorAudio();
+}
+
+function flushMirrorRelay(lines) {
+  if (lines.length > _mirrorRelayPlayed) {
+    for (let i = _mirrorRelayPlayed; i < lines.length; i++) {
+      if (lines[i] && lines[i].audio) queueMirrorAudio(lines[i].audio);
+    }
+    _mirrorRelayPlayed = lines.length;
+  }
+}
+
+function updateKitchenAudioMirror(data) {
+  const lines = data.relayLines || [];
+
+  if (_mirrorGreetingState === 'pending') {
+    if (data.hasGreetingAudio) {
+      _mirrorGreetingState = 'fetching';
+      fetch('/state/voice').then(r => r.json()).then(d => {
+        _mirrorGreetingState = 'resolved';
+        if (d.audio) queueMirrorAudio(d.audio);
+        flushMirrorRelay(lines);
+      }).catch(() => {
+        _mirrorGreetingState = 'resolved';
+        flushMirrorRelay(lines);
+      });
+      return;
+    }
+    if (Date.now() - _mirrorStartTime < MIRROR_GREETING_TIMEOUT_MS) {
+      return; // still waiting on the greeting to show up — hold relay lines back
+    }
+    _mirrorGreetingState = 'resolved'; // gave up waiting, don't block relay lines forever
+  }
+
+  if (_mirrorGreetingState === 'fetching') return; // in-flight fetch will flush relay itself once resolved
+  flushMirrorRelay(lines);
 }
 
 // the kitchen display may still be mid-performance on a previous order —
@@ -821,6 +913,7 @@ function pollUntilDone() {
   clearInterval(_pollTimer);
   _pollTimer = setInterval(() => {
     fetch('/state').then(r => r.json()).then(data => {
+      updateKitchenAudioMirror(data);
       // wait for the kitchen display's own performance to finish
       // (showPhase), not just the raw backend generation status
       if (data.showPhase === 'done') {

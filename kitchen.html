@@ -14,11 +14,29 @@
     background: #000;
   }
 
-  #bg {
+  /* ── STAGE WINDOW ──
+     Only this region is physically visible through the oven's cutout:
+     bottom-left corner of the monitor, 36×17cm on the 17.5" 1920×1200
+     panel this runs on. That's a fixed physical cutout, not something that
+     should grow with the browser viewport — hence hardcoded px, not a
+     vw/vh-based fit. Anchored bottom-left (not centered); everything that
+     used to be positioned against the full screen now lives inside this. */
+  #stage-window {
     position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
+    left: 0; bottom: 0;
+    width: 1834px;
+    height: 866px;
+    overflow: hidden;
+    z-index: 0;
+  }
+
+  #bg {
+    position: absolute; inset: 0;
     width: 100%; height: 100%;
-    object-fit: contain;
+    /* new back.jpg is being made to exactly match the 36:17 stage-window
+       ratio, so cover vs. contain shouldn't matter — cover is the safer
+       choice against any small rounding mismatch (no letterbox bars) */
+    object-fit: cover;
     object-position: center;
     z-index: 0;
   }
@@ -42,14 +60,11 @@
     );
   }
 
-  /* ── BOOK LAYOUT — aligned to back.jpg (4961×3508) ── */
+  /* ── BOOK LAYOUT — fills the stage-window exactly (new back.jpg is made
+     to the same 36:17 ratio, so no separate ratio-matching needed here) ── */
   #book {
-    position: fixed;
-    /* matches object-fit:contain scaling of back.jpg */
-    width: min(100vw, calc(100vh * 4961 / 3508));
-    height: min(100vh, calc(100vw * 3508 / 4961));
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
     z-index: 1;
   }
 
@@ -131,8 +146,8 @@
 
   /* ── IDLE HINT ── */
   #idle-hint {
-    position: fixed;
-    bottom: 40px; left: 50%; transform: translateX(-50%);
+    position: absolute;
+    bottom: 16px; left: 50%; transform: translateX(-50%);
     font-family: 'Courier Prime', monospace;
     font-size: clamp(9px, 1vw, 13px);
     letter-spacing: 0.5em;
@@ -147,7 +162,7 @@
 
   /* ── SHOW VIDEO OVERLAY (page-turn / cooking) ── */
   #show-video {
-    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: 94%; height: 94%;
     object-fit: cover; z-index: 800; background: #000;
     opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
@@ -159,7 +174,7 @@
      drops the painted frame back to black on this hardware/browser combo,
      so a real frozen still has to be a plain <img>, not a paused video */
   #idle-cover {
-    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: 94%; height: 94%;
     object-fit: cover; z-index: 800; background: #000;
     opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
@@ -169,7 +184,7 @@
   /* final reveal — the actual generated dish image, shown in place of
      the loading video once it's ready, and left up (not hidden again) */
   #dish-reveal {
-    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: 94%; height: 94%;
     object-fit: contain; z-index: 810; background: #000;
     opacity: 0; pointer-events: none; transition: opacity 0.8s ease;
@@ -189,32 +204,37 @@
 </head>
 <body>
 
-<img id="bg" src="back.jpg" alt="">
+<!-- everything the audience can actually see through the oven's cutout
+     lives in here — see #stage-window in the CSS above -->
+<div id="stage-window">
+  <img id="bg" src="back.jpg" alt="">
 
-<video id="show-video" muted playsinline></video>
-<img id="idle-cover" alt="">
-<img id="dish-reveal" alt="">
-<audio id="voice-audio"></audio>
-<audio id="relay-audio"></audio>
+  <video id="show-video" muted playsinline></video>
+  <img id="idle-cover" alt="">
+  <img id="dish-reveal" alt="">
 
-<div id="book">
-  <div id="dim-overlay"></div>
+  <div id="book">
+    <div id="dim-overlay"></div>
 
-  <!-- INGREDIENT ZONE — left page of back.jpg -->
-  <div id="zone-ingr">
-    <div id="plate-mask"></div>
+    <!-- INGREDIENT ZONE — left page of back.jpg -->
+    <div id="zone-ingr">
+      <div id="plate-mask"></div>
+    </div>
+
+    <!-- METHOD ZONE — AE overlay video -->
+    <div id="method-video-wrap">
+      <video id="method-video" autoplay muted playsinline>
+        <source src="2.webm" type="video/webm">
+        <source src="合成 2_4.mov" type="video/quicktime">
+      </video>
+    </div>
   </div>
 
-  <!-- METHOD ZONE — AE overlay video -->
-  <div id="method-video-wrap">
-    <video id="method-video" autoplay muted playsinline>
-      <source src="2.webm" type="video/webm">
-      <source src="合成 2_4.mov" type="video/quicktime">
-    </video>
-  </div>
+  <span id="idle-hint">awaiting order</span>
 </div>
 
-<span id="idle-hint">awaiting order</span>
+<audio id="voice-audio"></audio>
+<audio id="relay-audio"></audio>
 
 <div id="bar">
   <span>MYSTERY CHEF</span>
@@ -240,7 +260,7 @@ function randomPlatePos() {
 // standby frame from the moment kitchen.html loads (whether or not an
 // order has come in yet), and only starts actually playing once a guest
 // submits — then it plays through once, before the paper book is revealed.
-const PAGE_TURN_VIDEO_SRC = 'back1.mp4';
+const PAGE_TURN_VIDEO_SRC = 'back2.mp4'; // re-exported at 1834x866 to match the new stage-window ratio
 const SKIP_PAGE_TURN = false;
 
 // ── UTILS ─────────────────────────────────────────────────────
