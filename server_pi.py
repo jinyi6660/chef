@@ -162,7 +162,9 @@ NARRATION_CACHE = {}
 def prewarm_narration_cache(lines):
     for line in lines:
         if line not in NARRATION_CACHE:
-            NARRATION_CACHE[line] = voice_tts(line)
+            audio = voice_tts(line)
+            if audio:  # don't cache a transient failure — let it retry later
+                NARRATION_CACHE[line] = audio
 
 
 @app.route("/tts", methods=["POST"])
@@ -175,9 +177,12 @@ def tts_route():
     text = (request.json or {}).get("text", "").strip()
     if not text:
         return jsonify({"audio": None})
-    if text not in NARRATION_CACHE:
-        NARRATION_CACHE[text] = voice_tts(text)
-    return jsonify({"audio": NARRATION_CACHE[text]})
+    if text in NARRATION_CACHE:
+        return jsonify({"audio": NARRATION_CACHE[text]})
+    audio = voice_tts(text)
+    if audio:  # don't cache a transient failure — let the next request retry
+        NARRATION_CACHE[text] = audio
+    return jsonify({"audio": audio})
 
 
 GREETING_LINE = "Hey chef, we got a new order."
@@ -190,9 +195,13 @@ def generate_greeting_audio():
     call instead of a live Claude + TTS round-trip every order. Runs in
     its own thread on submission so it's ready as early as possible,
     while the relay and dish generation happen in parallel."""
-    if GREETING_LINE not in NARRATION_CACHE:
-        NARRATION_CACHE[GREETING_LINE] = voice_tts(GREETING_LINE)
-    display_state["greetingAudio"] = NARRATION_CACHE[GREETING_LINE]
+    if GREETING_LINE in NARRATION_CACHE:
+        display_state["greetingAudio"] = NARRATION_CACHE[GREETING_LINE]
+        return
+    audio = voice_tts(GREETING_LINE)
+    if audio:  # don't cache a transient failure — let the next order retry
+        NARRATION_CACHE[GREETING_LINE] = audio
+    display_state["greetingAudio"] = audio
 
 
 def extract_age_guess(chef1_line):

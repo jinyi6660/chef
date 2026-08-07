@@ -877,6 +877,16 @@ function flushMirrorRelay(lines) {
 
 function updateKitchenAudioMirror(data) {
   const lines = data.relayLines || [];
+  // The backend generates all 3 relay lines well before kitchen.html gets
+  // through its own much slower greeting/pageturn/reading phases, so
+  // relayLines is usually already full long before kitchen.html actually
+  // starts playing chef 1's video+audio. Without this gate this phone
+  // would play all three chef voices back-to-back right after the
+  // greeting, while kitchen.html is still mid page-turn/reading — badly
+  // out of sync. Hold relay playback back until kitchen.html has posted
+  // the same 'cooking' phase transition it uses right before it starts
+  // its own per-chef video+audio sequence.
+  const cookingStarted = data.showPhase === 'cooking' || data.showPhase === 'done';
 
   if (_mirrorGreetingState === 'pending') {
     if (data.hasGreetingAudio) {
@@ -884,10 +894,10 @@ function updateKitchenAudioMirror(data) {
       fetch('/state/voice').then(r => r.json()).then(d => {
         _mirrorGreetingState = 'resolved';
         if (d.audio) queueMirrorAudio(d.audio);
-        flushMirrorRelay(lines);
+        if (cookingStarted) flushMirrorRelay(lines);
       }).catch(() => {
         _mirrorGreetingState = 'resolved';
-        flushMirrorRelay(lines);
+        if (cookingStarted) flushMirrorRelay(lines);
       });
       return;
     }
@@ -898,7 +908,7 @@ function updateKitchenAudioMirror(data) {
   }
 
   if (_mirrorGreetingState === 'fetching') return; // in-flight fetch will flush relay itself once resolved
-  flushMirrorRelay(lines);
+  if (cookingStarted) flushMirrorRelay(lines);
 }
 
 // the kitchen display may still be mid-performance on a previous order —
