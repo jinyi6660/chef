@@ -3,6 +3,7 @@ from flask_cors import CORS
 import socket
 import anthropic
 from openai import OpenAI
+import requests
 import base64
 import json
 import os
@@ -46,6 +47,8 @@ REFERENCE_IMAGES = [
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+ELEVENLABS_VOICE_ID = "C5rrTayXl4m3QBraxgkY"  # cloned voice "jinyi"
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
@@ -119,12 +122,71 @@ def tts(text, voice):
         return None
 
 
+def elevenlabs_tts(text):
+    """Speaks text with the cloned ElevenLabs voice ("jinyi"), returns
+    base64 audio or None on failure (missing key, network error, etc)."""
+    if not ELEVENLABS_API_KEY:
+        return None
+    try:
+        resp = requests.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
+            headers={
+                "xi-api-key": ELEVENLABS_API_KEY,
+                "Content-Type": "application/json",
+            },
+            json={
+                "text": text,
+                "model_id": "eleven_multilingual_v2",
+                "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return base64.b64encode(resp.content).decode("utf-8")
+    except Exception:
+        return None
+
+
+def voice_tts(text, fallback_voice="onyx"):
+    """Cloned voice first, falls back to OpenAI TTS if ElevenLabs is
+    unavailable (missing key, quota, or network failure) so a live show
+    never loses audio to a single provider's outage."""
+    return elevenlabs_tts(text) or tts(text, fallback_voice)
+
+
+# Fixed narration lines (VN intro + questions + submit), cached in memory
+# so the cloned voice is only generated once per line, not per guest.
+NARRATION_CACHE = {}
+
+
+def prewarm_narration_cache(lines):
+    for line in lines:
+        if line not in NARRATION_CACHE:
+            NARRATION_CACHE[line] = voice_tts(line)
+
+
+@app.route("/tts", methods=["POST"])
+def tts_route():
+    """Returns cloned-voice audio (base64) for a piece of narration text,
+    generating + caching it on first request. Used by index.html's VN
+    script (intro lines + the 4 questions + the submit line) so the
+    on-screen narration uses the guest-facing cloned voice instead of the
+    browser's built-in speechSynthesis."""
+    text = (request.json or {}).get("text", "").strip()
+    if not text:
+        return jsonify({"audio": None})
+    if text not in NARRATION_CACHE:
+        NARRATION_CACHE[text] = voice_tts(text)
+    return jsonify({"audio": NARRATION_CACHE[text]})
+
+
 def generate_greeting_audio(answers_text):
     """Writes a one-line 'server announcing the order to the kitchen' voice
     line personalised from the guest's own answers, then speaks it with
-    OpenAI TTS. Runs immediately on submission (before the dish itself
-    exists) so the kitchen display can play it first, while the relay and
-    dish generation happen in parallel."""
+    the cloned voice (falls back to OpenAI TTS on failure). Runs
+    immediately on submission (before the dish itself exists) so the
+    kitchen display can play it first, while the relay and dish
+    generation happen in parallel."""
     try:
         line_resp = client.messages.create(
             model="claude-opus-4-6",
@@ -135,7 +197,7 @@ Tone: warm, theatrical, like calling out an order ticket. English only. No quota
             messages=[{"role": "user", "content": f"Guest's answers:\n{answers_text}"}],
         )
         line = line_resp.content[0].text.strip().strip('"')
-        display_state["greetingAudio"] = tts(line, "onyx")
+        display_state["greetingAudio"] = voice_tts(line)
     except Exception:
         display_state["greetingAudio"] = None
 
@@ -554,6 +616,22 @@ def get_local_ip():
     finally:
         s.close()
 
+
+# The VN intro/question/submit lines from index.html's SCRIPT, kept in
+# sync manually since they're static UI copy, not shared state. Warmed in
+# a background thread at process start (both local `python server_pi.py`
+# and gunicorn on Render import this module) so the first guest's screen
+# doesn't wait on the first-ever ElevenLabs call for each line.
+NARRATION_LINES = [
+    "Hello, welcome to this restaurant.",
+    "Today, our special menu is birthday cake — baked for you by three chefs, together.",
+    "Do you usually eat cake on your birthday?",
+    "What flavour was the most memorable cake in your memory?",
+    "What did it look like?",
+    "Who did you eat it with, and where?",
+    "Your memory file has been received.  The chef will now begin.",
+]
+threading.Thread(target=prewarm_narration_cache, args=(NARRATION_LINES,), daemon=True).start()
 
 if __name__ == "__main__":
     local_ip = get_local_ip()

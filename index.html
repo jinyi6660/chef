@@ -503,7 +503,35 @@ if (window.speechSynthesis) {
   speechSynthesis.onvoiceschanged = loadV;
   loadV();
 }
+const _narrationCache = {};
 function speak(text) {
+  const cleanText = text.replace(/\n/g, ' ');
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  if (_narrationCache[cleanText]) {
+    playClonedVoice(_narrationCache[cleanText]);
+    return;
+  }
+  fetch('/tts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: cleanText })
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (d.audio) {
+        _narrationCache[cleanText] = d.audio;
+        playClonedVoice(d.audio);
+      } else {
+        speakFallback(cleanText);
+      }
+    })
+    .catch(() => speakFallback(cleanText));
+}
+function playClonedVoice(base64) {
+  const audio = new Audio('data:audio/mpeg;base64,' + base64);
+  audio.play().catch(() => {});
+}
+function speakFallback(text) {
   if (!window.speechSynthesis) return;
   speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
@@ -603,34 +631,27 @@ function skipTypewriter(el, text) {
 // type: 'ask' = show text + voice input
 // type: 'submit' = show submit button
 const SCRIPT = [
-  { type:'say', text:'你好。\nWelcome to Mystery Chef.' },
-  { type:'say', text:'I am an AI archive system.\nI reconstruct identity through food memory.' },
-  { type:'say', text:'Here — what you remember\nbecomes what you eat.' },
-  { type:'say', text:'Good. Let us begin.' },
+  { type:'say', text:'Hello, welcome to this restaurant.' },
+  { type:'say', text:'Today, our special menu is birthday cake —\nbaked for you by three chefs, together.' },
   { type:'ask',
-    text:'What food stays in your memory the most?',
-    ph:'a dish, a flavour, a small moment...',
-    key:'memorable_food', qIndex: 1, qTotal: 5
+    text:'Do you usually eat cake on your birthday?',
+    ph:'yes, no, sometimes...',
+    key:'birthday_cake_habit', qIndex: 1, qTotal: 4
   },
   { type:'ask',
-    text:'How would you describe its taste?',
-    ph:'sweet, bitter, warm, soft, unfamiliar...',
-    key:'taste', qIndex: 2, qTotal: 5
-  },
-  { type:'ask',
-    text:'Where were you — and who were you with?',
-    ph:'place, time, people, atmosphere...',
-    key:'place_and_company', qIndex: 3, qTotal: 5
+    text:'What flavour was the most memorable cake in your memory?',
+    ph:'sweet, chocolate, vanilla, unfamiliar...',
+    key:'memorable_flavour', qIndex: 2, qTotal: 4
   },
   { type:'ask',
     text:'What did it look like?',
     ph:'colour, texture, shape, temperature...',
-    key:'appearance', qIndex: 4, qTotal: 5
+    key:'appearance', qIndex: 3, qTotal: 4
   },
   { type:'ask',
-    text:'And... how did it make you feel?',
-    ph:'in your own words...',
-    key:'feeling', qIndex: 5, qTotal: 5
+    text:'Who did you eat it with, and where?',
+    ph:'place, time, people, atmosphere...',
+    key:'place_and_company', qIndex: 4, qTotal: 4
   },
   { type:'submit',
     text:'Your memory file has been received.\n\nThe chef will now begin.'
@@ -702,7 +723,7 @@ function runStep() {
     typewrite(textEl, s.text, 30, () => {
       vnReady = true;
       caretEl.style.display = 'block';
-      speak(s.text.replace('你好。\n', 'Hello. '));
+      speak(s.text);
     });
 
   } else if (s.type === 'choose') {
@@ -752,7 +773,7 @@ document.getElementById('s-vn').addEventListener('click', e => {
     skipTypewriter(document.getElementById('vn-text'), s.text);
     document.getElementById('vn-caret').style.display = 'block';
     vnReady = true;
-    speak(s.text.replace('你好。\n', 'Hello. '));
+    speak(s.text);
     return;
   }
   vnStep++;
@@ -937,11 +958,10 @@ function esc(s) {
 function showReceipt() {
   const a = vnAnswers;
   const rows = [
-    [a.memorable_food,    '// the food that stays in your memory'],
-    [a.taste,             '// how you described its taste'],
-    [a.place_and_company, '// where, when, and who you were with'],
-    [a.appearance,        '// what it looked like'],
-    [a.feeling,           '// how it made you feel'],
+    [a.birthday_cake_habit, '// whether you eat cake on your birthday'],
+    [a.memorable_flavour,   '// the flavour that stayed in your memory'],
+    [a.appearance,          '// what it looked like'],
+    [a.place_and_company,   '// where, when, and who you were with'],
   ].filter(([v]) => v);
 
   document.getElementById('rc-list').innerHTML = rows.map(([v,t]) =>
