@@ -48,10 +48,11 @@
   #bg {
     position: absolute; inset: 0;
     width: 100%; height: 100%;
-    /* new back.jpg is being made to exactly match the 36:17 stage-window
-       ratio, so cover vs. contain shouldn't matter — cover is the safer
-       choice against any small rounding mismatch (no letterbox bars) */
-    object-fit: cover;
+    /* contain, not cover — back.jpg (4961×3508) is much taller-per-width
+       than the new wide stage-window, and cropping it to cover cut the
+       plate/knife off top and bottom. Showing the full image letterboxed
+       (empty sides) was chosen over losing that content. */
+    object-fit: contain;
     object-position: center;
     z-index: 0;
   }
@@ -75,11 +76,19 @@
     );
   }
 
-  /* ── BOOK LAYOUT — fills the stage-window exactly (new back.jpg is made
-     to the same 36:17 ratio, so no separate ratio-matching needed here) ── */
+  /* ── BOOK LAYOUT ──
+     #book is sized to back.jpg's own 4961×3508 ratio (contain-fit within
+     the wider stage-window, centered — matches #bg's object-fit:contain
+     above) rather than stretched to the full window, so its children's
+     percentages (zone-ingr, method-video-wrap, both original values) line
+     up with where the image content actually is instead of empty
+     letterbox space. */
   #book {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
+    position: absolute;
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    height: 100%;
+    aspect-ratio: 4961 / 3508;
+    max-width: 100%;
     z-index: 1;
   }
 
@@ -447,19 +456,6 @@ async function playLoadingStage(videoSrc, isDone) {
   video.load();
   try { await video.play(); } catch {}
 
-  // jump the opacity between fixed steps (not a smooth fade) while looping
-  // — masks the visual seam where the loop restarts from frame 0, and
-  // makes the wait itself read as a deliberate pulse rather than a stuck
-  // loading loop. #show-video normally has a CSS opacity transition, so
-  // that's disabled for the duration of this pulse to keep the jumps sharp.
-  const OPACITY_STEPS = [0.3, 1, 0.5, 0.4];
-  let stepIdx = 0;
-  video.style.transition = 'none';
-  const pulseInterval = setInterval(() => {
-    video.style.opacity = OPACITY_STEPS[stepIdx % OPACITY_STEPS.length];
-    stepIdx++;
-  }, 300);
-
   // the backend retries image generation a few times on failure, but if it
   // still never succeeds, hasImage would never turn true — cap the wait so
   // a failed image can't hang the show here forever
@@ -469,10 +465,6 @@ async function playLoadingStage(videoSrc, isDone) {
     if (Date.now() - waitStart > MAX_IMAGE_WAIT_MS) break;
     await sleep(500);
   }
-
-  clearInterval(pulseInterval);
-  video.style.opacity = '';
-  video.style.transition = '';
 
   // reveal the actual generated dish image in place of the loading video,
   // and leave it up — this is the final beat, never falls back to the book
@@ -704,6 +696,7 @@ async function runShow(state) {
   if (!mv.ended) {
     await new Promise(resolve => mv.addEventListener('ended', resolve, { once: true }));
   }
+  hideStage(); // book fades out for real, not just covered by the opaque video on top of it
   setPhase('COOKING');
   await postPhase('cooking');
   await playCookingStages();
@@ -751,6 +744,7 @@ async function startDemo() {
   if (!mv.ended) {
     await new Promise(resolve => mv.addEventListener('ended', resolve, { once: true }));
   }
+  hideStage();
   setPhase('DEMO — COOKING');
   await playCookingStages();
 
