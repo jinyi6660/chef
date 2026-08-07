@@ -180,26 +180,19 @@ def tts_route():
     return jsonify({"audio": NARRATION_CACHE[text]})
 
 
-def generate_greeting_audio(answers_text):
-    """Writes a one-line 'server announcing the order to the kitchen' voice
-    line personalised from the guest's own answers, then speaks it with
-    the cloned voice (falls back to OpenAI TTS on failure). Runs
-    immediately on submission (before the dish itself exists) so the
-    kitchen display can play it first, while the relay and dish
-    generation happen in parallel."""
-    try:
-        line_resp = client.messages.create(
-            model="claude-opus-4-6",
-            max_tokens=80,
-            system="""You are a restaurant server announcing a new order to the kitchen out loud, mid-service.
-Write exactly one short spoken sentence (8-16 words), referencing something specific and concrete from the guest's answers below.
-Tone: warm, theatrical, like calling out an order ticket. English only. No quotation marks, no stage directions — just the line itself.""",
-            messages=[{"role": "user", "content": f"Guest's answers:\n{answers_text}"}],
-        )
-        line = line_resp.content[0].text.strip().strip('"')
-        display_state["greetingAudio"] = voice_tts(line)
-    except Exception:
-        display_state["greetingAudio"] = None
+GREETING_LINE = "Hey chef, we got a new order."
+
+
+def generate_greeting_audio():
+    """Speaks the fixed kitchen-greeting line with the cloned voice. Uses
+    NARRATION_CACHE (same cache as the VN intro/question lines) since the
+    text is fixed, not per-order — cheap and near-instant after the first
+    call instead of a live Claude + TTS round-trip every order. Runs in
+    its own thread on submission so it's ready as early as possible,
+    while the relay and dish generation happen in parallel."""
+    if GREETING_LINE not in NARRATION_CACHE:
+        NARRATION_CACHE[GREETING_LINE] = voice_tts(GREETING_LINE)
+    display_state["greetingAudio"] = NARRATION_CACHE[GREETING_LINE]
 
 
 def extract_age_guess(chef1_line):
@@ -482,7 +475,6 @@ def build_dish():
     # the relay below rather than adding to the wait before either starts.
     threading.Thread(
         target=generate_greeting_audio,
-        args=(answers_text,),
         daemon=True
     ).start()
 
@@ -630,6 +622,7 @@ NARRATION_LINES = [
     "What did it look like?",
     "Who did you eat it with, and where?",
     "Your memory file has been received.  The chef will now begin.",
+    GREETING_LINE,
 ]
 threading.Thread(target=prewarm_narration_cache, args=(NARRATION_LINES,), daemon=True).start()
 
