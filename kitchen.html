@@ -32,8 +32,8 @@
      cutout (positive x = right, positive y = up), instead of guessing
      blind over chat. Leave at 0,0 once it lines up. */
   :root {
-    --stage-x: 0px;
-    --stage-y: 0px;
+    --stage-x: -60px;
+    --stage-y: 20px;
   }
   #stage-window {
     position: fixed;
@@ -566,13 +566,13 @@ async function playShowVideo(src, { loopUntil, keepVisible } = {}) {
   }
 }
 
-// shows a still snapshot of back1.mp4 as the idle standby cover, visible
-// from page load before any order has come in. back1.mp4 itself fades in
-// from black over roughly its first second, so grabbing a frame too early
-// (verified via ffmpeg frame extraction: ~0.2-0.5s in is still black/near-
-// black) just captures that black intro — not a video-rendering bug. This
-// plays it briefly off-screen, waits past the fade-in, then snapshots the
-// live frame onto a canvas and displays THAT as a plain <img>.
+// shows a still snapshot of the page-turn video's very first frame as the
+// idle standby cover — the recipe book hasn't "opened" yet, so this
+// should freeze right at the start, not partway into the video's own
+// intro. A video that's never been played doesn't reliably paint a frame
+// onto canvas on this browser/hardware, so this still has to nudge it
+// forward a tiny amount (not skip ahead to later content) purely to force
+// a real decoded frame to exist before snapshotting it.
 async function showIdlePageTurnFrame() {
   const video = document.getElementById('show-video');
   const cover = document.getElementById('idle-cover');
@@ -589,7 +589,7 @@ async function showIdlePageTurnFrame() {
       video.play(),
       new Promise((_, reject) => setTimeout(() => reject(new Error('play() timed out')), 3000)),
     ]);
-    await sleep(1300); // past the ~1s fade-in from black
+    await sleep(80); // just enough for the browser to actually decode/paint a frame
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
