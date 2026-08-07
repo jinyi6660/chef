@@ -15,17 +15,32 @@
   }
 
   /* ── STAGE WINDOW ──
-     Only this region is physically visible through the oven's cutout:
-     bottom-left corner of the monitor, 36×17cm on the 17.5" 1920×1200
-     panel this runs on. That's a fixed physical cutout, not something that
-     should grow with the browser viewport — hence hardcoded px, not a
-     vw/vh-based fit. Anchored bottom-left (not centered); everything that
-     used to be positioned against the full screen now lives inside this. */
+     The oven's glass has an opaque black mask painted around a 36.5×17cm
+     clear viewing window (the screen itself renders everything — this
+     mask is physical, not a CSS crop). The rightmost ~3.5cm of that is
+     ALSO covered by a separate black strip on the glass, but that's a
+     physical mask too — content renders at the FULL 36.5×17cm size (not
+     artificially shrunk to dodge it), since the glass already hides
+     whatever falls in that strip for free, and rendering bigger keeps
+     everything else from looking unnecessarily small. Sized in hardcoded
+     px since this is a physical cutout, not something that should scale
+     with the browser viewport like vw/vh would.
+
+     CALIBRATION: --stage-x/--stage-y nudge the window without touching
+     the layout logic above — tweak these two numbers directly on the
+     physical device while eyeballing the real result through the oven
+     cutout (positive x = right, positive y = up), instead of guessing
+     blind over chat. Leave at 0,0 once it lines up. */
+  :root {
+    --stage-x: 0px;
+    --stage-y: 0px;
+  }
   #stage-window {
     position: fixed;
-    left: 0; bottom: 0;
-    width: 1834px;
-    height: 866px;
+    left: calc(0px + var(--stage-x));
+    bottom: calc(0px + var(--stage-y));
+    width: 1859px;  /* 36.5cm */
+    height: 866px;  /* 17cm */
     overflow: hidden;
     z-index: 0;
   }
