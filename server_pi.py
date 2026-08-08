@@ -195,6 +195,25 @@ def tts_debug():
         return jsonify({"key_configured": True, "error": str(e)})
 
 
+@app.route("/image-debug", methods=["GET"])
+def image_debug():
+    """Temporary diagnostic route — makes one real gpt-image-2 call and
+    reports the exact error (quota, billing, org-verification, etc)
+    instead of the silent None the real retry loop falls back to. A
+    failed request isn't billed, so this only costs anything if
+    generation is actually working."""
+    try:
+        result = openai_client.images.generate(
+            model="gpt-image-2",
+            prompt="A small red apple on a white background.",
+            size="1024x1024",
+            quality="medium",
+        )
+        return jsonify({"ok": True, "has_image": bool(result.data and result.data[0].b64_json)})
+    except Exception as e:
+        return jsonify({"ok": False, "error_type": type(e).__name__, "error": str(e)})
+
+
 def voice_tts(text, fallback_voice="onyx"):
     """Cloned voice first, falls back to OpenAI TTS if ElevenLabs is
     unavailable (missing key, quota, or network failure) so a live show
