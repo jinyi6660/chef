@@ -571,6 +571,14 @@ async function showIdlePageTurnFrame() {
   video.src = PAGE_TURN_VIDEO_SRC;
   video.loop = false;
   video.classList.remove('on'); // keep the actual video element hidden throughout
+  // Chrome's video power-saver auto-pauses muted, video-only elements it
+  // considers "not visible" — and opacity:0 (from the .on/off class
+  // above) qualifies, so play() below gets silently aborted with
+  // "video-only background media was paused to save power", the whole
+  // idle standby frame never gets captured, and the screen just stays
+  // black forever. A barely-nonzero opacity is still invisible to the
+  // eye but keeps Chrome from classifying it as background media.
+  video.style.opacity = '0.01';
   video.load();
   try {
     // this function is awaited by pollForOrder() before it starts polling
@@ -591,6 +599,8 @@ async function showIdlePageTurnFrame() {
     cover.classList.add('on');
   } catch (err) {
     console.error('idle standby frame failed to render', err);
+  } finally {
+    video.style.opacity = ''; // hand opacity control back to the .on/off class
   }
 }
 
