@@ -585,6 +585,13 @@ function stopMic() {
 }
 
 async function toggleMic() {
+  // force the on-screen keyboard down before doing anything else — if the
+  // guest had tapped into the text field earlier and switches to the mic
+  // without the field ever losing focus, iOS keeps the keyboard up
+  // through everything that follows (including the mic permission
+  // prompt), covering half the screen while recording.
+  document.getElementById('vn-input').blur();
+
   if (recognition) {
     if (isRec) {
       recognition.stop(); stopMic();
@@ -593,7 +600,6 @@ async function toggleMic() {
       try { recognition.start(); } catch(e) {}
       isRec = true;
       document.getElementById('vn-mic').classList.add('rec');
-      document.getElementById('vn-input').focus();
     }
     return;
   }
