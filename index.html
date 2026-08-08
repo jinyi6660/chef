@@ -504,29 +504,34 @@ if (window.speechSynthesis) {
   speechSynthesis.onvoiceschanged = loadV;
   loadV();
 }
+// Maps cleaned narration text -> in-flight/resolved fetch promise. Kicked
+// off as soon as a line starts typewriting (see runStep()) instead of
+// waiting for speak() to be called once typing finishes, so the network
+// round-trip to /tts happens WHILE the guest is still reading the text
+// typing out, rather than being fully in series after it — this is what
+// was making the voice feel noticeably slow to start.
 const _narrationCache = {};
+function prefetchNarration(text) {
+  const cleanText = text.replace(/\n/g, ' ');
+  if (!_narrationCache[cleanText]) {
+    _narrationCache[cleanText] = fetch('/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: cleanText })
+    })
+      .then(r => r.json())
+      .then(d => d.audio || null)
+      .catch(() => null);
+  }
+  return _narrationCache[cleanText];
+}
 function speak(text) {
   const cleanText = text.replace(/\n/g, ' ');
   if (window.speechSynthesis) speechSynthesis.cancel();
-  if (_narrationCache[cleanText]) {
-    playClonedVoice(_narrationCache[cleanText]);
-    return;
-  }
-  fetch('/tts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: cleanText })
-  })
-    .then(r => r.json())
-    .then(d => {
-      if (d.audio) {
-        _narrationCache[cleanText] = d.audio;
-        playClonedVoice(d.audio);
-      } else {
-        speakFallback(cleanText);
-      }
-    })
-    .catch(() => speakFallback(cleanText));
+  prefetchNarration(cleanText).then(audio => {
+    if (audio) playClonedVoice(audio);
+    else speakFallback(cleanText);
+  });
 }
 function playClonedVoice(base64) {
   const audio = new Audio('data:audio/mpeg;base64,' + base64);
@@ -769,6 +774,14 @@ function runStep() {
   optsEl.innerHTML = ''; optsEl.classList.remove('on');
   inputArea.classList.remove('on');
   vnReady = false;
+
+  // start fetching this line's cloned-voice audio now, in parallel with
+  // the typewriter animation below, instead of only starting once typing
+  // finishes — by the time the text is done typing out, the audio is
+  // usually already ready to play instantly.
+  if (s.type === 'say' || s.type === 'ask' || s.type === 'submit') {
+    prefetchNarration(s.text);
+  }
 
   // Update progress bar for question steps
   if (s.type === 'ask') {

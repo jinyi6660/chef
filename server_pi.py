@@ -167,6 +167,34 @@ def elevenlabs_tts(text):
         return None
 
 
+@app.route("/tts-debug", methods=["GET"])
+def tts_debug():
+    """Temporary diagnostic route — reports whether ELEVENLABS_API_KEY is
+    configured on this deployment and, if so, makes one real test call so
+    a failure (bad key, wrong voice_id, quota) shows up as an actual
+    error message instead of a silent fallback to OpenAI's voice."""
+    if not ELEVENLABS_API_KEY:
+        return jsonify({"key_configured": False})
+    try:
+        resp = requests.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
+            headers={
+                "xi-api-key": ELEVENLABS_API_KEY,
+                "Content-Type": "application/json",
+            },
+            json={"text": "Test.", "model_id": "eleven_multilingual_v2"},
+            timeout=30,
+        )
+        return jsonify({
+            "key_configured": True,
+            "status_code": resp.status_code,
+            "ok": resp.ok,
+            "body": None if resp.ok else resp.text[:500],
+        })
+    except Exception as e:
+        return jsonify({"key_configured": True, "error": str(e)})
+
+
 def voice_tts(text, fallback_voice="onyx"):
     """Cloned voice first, falls back to OpenAI TTS if ElevenLabs is
     unavailable (missing key, quota, or network failure) so a live show
