@@ -108,6 +108,26 @@ def get_ingredient_images():
     return jsonify({"ingredientImages": display_state.get("ingredientImages", [])})
 
 
+@app.route("/stt", methods=["POST"])
+def stt_route():
+    """Transcribes a short voice recording with OpenAI Whisper. Safari on
+    iOS never implemented the Web Speech API's SpeechRecognition
+    interface, so the ordering screen's mic button falls back to
+    recording audio client-side (MediaRecorder) and sending it here
+    instead of transcribing on-device."""
+    audio_file = request.files.get("audio")
+    if not audio_file:
+        return jsonify({"text": ""})
+    try:
+        result = openai_client.audio.transcriptions.create(
+            model="whisper-1",
+            file=(audio_file.filename or "recording.mp4", audio_file.read()),
+        )
+        return jsonify({"text": result.text.strip()})
+    except Exception:
+        return jsonify({"text": ""})
+
+
 def tts(text, voice):
     """Speaks text with OpenAI TTS, returns base64 audio or None on failure."""
     try:

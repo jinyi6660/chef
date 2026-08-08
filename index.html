@@ -276,6 +276,7 @@
   }
   .vn-icon-btn:hover { background: rgba(255,255,255,0.1); }
   #vn-mic.rec { background: rgba(220,60,60,0.3); animation: blink .55s step-end infinite; }
+  #vn-mic.transcribing { background: rgba(107,159,255,0.3); animation: blink .8s step-end infinite; }
 
   /* ── LOADING ── */
   #s-loading {
@@ -548,8 +549,14 @@ function speakFallback(text) {
 }
 
 // ── STT ──
+// Safari on iOS has never implemented the Web Speech API's
+// SpeechRecognition interface, so on-device recognition (the `recognition`
+// path below) is Chrome/Blink-only. On everything else (Safari included)
+// toggleMic() falls back to recording audio with MediaRecorder and
+// transcribing it server-side with Whisper via /stt.
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition = null, isRec = false;
+let _recMediaRecorder = null, _recChunks = [];
 
 if (SpeechRec) {
   recognition = new SpeechRec();
@@ -562,8 +569,6 @@ if (SpeechRec) {
   };
   recognition.onend = () => stopMic();
   recognition.onerror = () => stopMic();
-} else {
-  document.getElementById('vn-mic').style.display = 'none';
 }
 
 function openAnswerInput() {
@@ -575,18 +580,66 @@ function stopMic() {
   isRec = false;
   document.getElementById('vn-mic').classList.remove('rec');
 }
-function toggleMic() {
-  if (!recognition) return;
-  if (isRec) {
-    recognition.stop(); stopMic();
-  } else {
-    document.getElementById('vn-input').value = '';
-    try { recognition.start(); } catch(e) {}
-    isRec = true;
-    const btn = document.getElementById('vn-mic');
-    btn.classList.add('rec');
-    document.getElementById('vn-input').focus();
+
+async function toggleMic() {
+  if (recognition) {
+    if (isRec) {
+      recognition.stop(); stopMic();
+    } else {
+      document.getElementById('vn-input').value = '';
+      try { recognition.start(); } catch(e) {}
+      isRec = true;
+      document.getElementById('vn-mic').classList.add('rec');
+      document.getElementById('vn-input').focus();
+    }
+    return;
   }
+  await toggleRecordAndTranscribe();
+}
+
+async function toggleRecordAndTranscribe() {
+  const btn = document.getElementById('vn-mic');
+
+  if (isRec) {
+    isRec = false;
+    btn.classList.remove('rec');
+    btn.classList.add('transcribing');
+    if (_recMediaRecorder && _recMediaRecorder.state !== 'inactive') _recMediaRecorder.stop();
+    return;
+  }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    console.error('mic access failed', err);
+    return;
+  }
+
+  const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+  _recMediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+  _recChunks = [];
+  _recMediaRecorder.ondataavailable = e => { if (e.data.size > 0) _recChunks.push(e.data); };
+  _recMediaRecorder.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    const blob = new Blob(_recChunks, { type: _recMediaRecorder.mimeType || 'audio/mp4' });
+    const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+    const form = new FormData();
+    form.append('audio', blob, 'recording.' + ext);
+    try {
+      const res = await fetch('/stt', { method: 'POST', body: form });
+      const d = await res.json();
+      if (d.text) document.getElementById('vn-input').value = d.text;
+    } catch (err) {
+      console.error('transcription request failed', err);
+    }
+    btn.classList.remove('transcribing');
+  };
+
+  document.getElementById('vn-input').value = '';
+  _recMediaRecorder.start();
+  isRec = true;
+  btn.classList.add('rec');
 }
 
 // ── SCREEN SWITCH ──
