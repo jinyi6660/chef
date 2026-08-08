@@ -572,8 +572,11 @@ if (SpeechRec) {
 }
 
 function openAnswerInput() {
+  // no auto-focus here on purpose — focusing the input pops the iOS
+  // keyboard up immediately even when the guest means to answer by voice,
+  // eating half the (already small) screen. Typing still works: tapping
+  // the input field focuses it and brings up the keyboard as normal.
   document.getElementById('vn-input-area').classList.add('on');
-  setTimeout(() => document.getElementById('vn-input').focus(), 100);
 }
 
 function stopMic() {
