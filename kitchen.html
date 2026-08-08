@@ -456,10 +456,13 @@ async function playLoadingStage(videoSrc, isDone) {
   video.load();
   try { await video.play(); } catch {}
 
-  // the backend retries image generation a few times on failure, but if it
-  // still never succeeds, hasImage would never turn true — cap the wait so
-  // a failed image can't hang the show here forever
-  const MAX_IMAGE_WAIT_MS = 90000;
+  // the backend retries image generation up to 3 times on failure — each
+  // attempt is a prompt-writing call plus the image call itself, and
+  // gpt-image-2 alone can take 60-90s+, so a single retry can easily push
+  // total time past a minute and a half. Cap generously so a legitimately
+  // slow-but-working generation doesn't get cut off before it finishes;
+  // still bounded so a truly failed image can't hang the show forever.
+  const MAX_IMAGE_WAIT_MS = 240000;
   const waitStart = Date.now();
   while (!(await isDone())) {
     if (Date.now() - waitStart > MAX_IMAGE_WAIT_MS) break;
