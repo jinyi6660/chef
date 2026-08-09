@@ -508,6 +508,23 @@ output in English only. continuous prose. refer to the subject as "the subject".
     )
 
 
+def moderate_text(text):
+    """True if text is flagged as genuinely inappropriate (violence,
+    hate, sexual content, self-harm, etc) by OpenAI's moderation
+    endpoint. This installation runs on a public exhibition screen, and
+    guest free-text answers feed directly into AI-generated content —
+    relay commentary, the dish description, the emotion-tag words shown
+    on screen, and the generated cake image itself — so nothing a guest
+    types should be able to reach any of that unfiltered."""
+    if not text.strip():
+        return False
+    try:
+        result = openai_client.moderations.create(model="omni-moderation-latest", input=text)
+        return bool(result.results[0].flagged)
+    except Exception:
+        return False  # don't let a moderation-service hiccup block the show
+
+
 @app.route("/build-dish", methods=["POST"])
 def build_dish():
     global display_state
@@ -531,6 +548,11 @@ def build_dish():
     data = request.json
     answers = data.get("answers", {})
     answers_text = "\n".join([f"{k}: {v}" for k, v in answers.items() if v])
+
+    # screen out genuinely inappropriate guest input before it can reach
+    # any AI call or the public kitchen screen — see moderate_text() above
+    if moderate_text(answers_text):
+        answers_text = "The guest chose not to share specific details this time."
 
     display_state.update({
         "status": "cooking",
