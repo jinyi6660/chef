@@ -324,7 +324,7 @@ The cake should feel like a surreal birthday cake sculpture made from memory: la
 
 Mood: uncanny, dreamlike, faintly unsettling, emotionally strange. The cake should feel edible but wrong, sweet but uncomfortable, celebratory but haunted by absence. Not cute, not elegant, not a clean bakery catalogue photo.
 
-Style: surreal studio photography, sculptural cake object, glossy cream and icing textures, artificial colours, soft dramatic lighting, slightly theatrical composition, isolated on a clean black or pale studio background. The cake may look messy, melting, unstable, or over-decorated, but it must remain recognisable as a birthday cake.
+Style: surreal studio photography, sculptural cake object, glossy cream and icing textures, artificial colours, soft dramatic lighting, slightly theatrical composition, isolated on a completely solid pure black studio background — no gradient, no pale or grey tones, the background must be flat black. The cake may look messy, melting, unstable, or over-decorated, but it must remain recognisable as a birthday cake.
 
 No text except the numeral candles. No people, no hands, no table setting, no logo, no watermark.
 
