@@ -261,6 +261,7 @@
 <audio id="relay-audio"></audio>
 <audio id="stage4-loop-audio" loop></audio>
 <audio id="stage4-end-audio"></audio>
+<audio id="stage123-ambient-audio" loop></audio>
 
 <div id="bar">
   <span>MYSTERY CHEF</span>
@@ -517,10 +518,22 @@ async function playCookingStages() {
   }
   if (!lines.length) console.warn('playCookingStages: no relayLines yet in /state');
 
+  // quiet oven-running ambience under the three chefs' voices, looping
+  // for however long stage1-3 actually take (each one is stretched to
+  // its own voice line's length, so the total isn't fixed)
+  const ambient = document.getElementById('stage123-ambient-audio');
+  ambient.src = 'stage123_ambient.wav';
+  ambient.volume = 0.35;
+  ambient.currentTime = 0;
+  try { await ambient.play(); } catch {}
+
   for (let i = 0; i < STAGE_VIDEOS.length; i++) {
     const line = lines[i];
     await playSyncedStage(STAGE_VIDEOS[i], STAGE_DURATIONS[i], line && line.audio);
   }
+
+  ambient.pause();
+  ambient.loop = false;
 
   await playLoadingStage(LOADING_VIDEO, async () => {
     const d = await pollState();
