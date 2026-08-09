@@ -205,6 +205,16 @@
   }
   #idle-cover.on { opacity: 1; }
 
+  /* dims the idle standby frame while waiting for an order — fades out
+     to fully clear the moment an order comes in */
+  #idle-dim {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 94%; height: 94%;
+    background: #000; z-index: 805;
+    opacity: 0; pointer-events: none; transition: opacity 0.8s ease;
+  }
+  #idle-dim.on { opacity: 0.7; }
+
   /* final reveal — the actual generated dish image, shown in place of
      the loading video once it's ready, and left up (not hidden again) */
   #dish-reveal {
@@ -235,6 +245,7 @@
 
   <video id="show-video" muted playsinline></video>
   <img id="idle-cover" alt="">
+  <div id="idle-dim"></div>
   <img id="dish-reveal" alt="">
 
   <div id="book">
@@ -639,6 +650,7 @@ async function showIdlePageTurnFrame() {
     cover.src = canvas.toDataURL('image/jpeg', 0.85);
     video.pause();
     cover.classList.add('on');
+    document.getElementById('idle-dim').classList.add('on');
   } catch (err) {
     console.error('idle standby frame failed to render', err);
   } finally {
@@ -710,6 +722,7 @@ async function runShow(state) {
   resetDisplay();
   hideStage();
   setIdle(false);
+  document.getElementById('idle-dim').classList.remove('on'); // order submitted — fade the dim out
 
   // 1 — AI waiter announces the order (back1.mp4 still sitting on its
   // standby frame from idle)
