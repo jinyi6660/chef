@@ -604,12 +604,21 @@ async function toggleMic() {
   await toggleRecordAndTranscribe();
 }
 
+let _recStartTime = 0;
+const MIN_RECORDING_MS = 400; // guards against an accidental tap being sent as a near-empty clip
+
 async function toggleRecordAndTranscribe() {
   const btn = document.getElementById('vn-mic');
 
   if (isRec) {
     isRec = false;
     btn.classList.remove('rec');
+    if (Date.now() - _recStartTime < MIN_RECORDING_MS) {
+      // too short to contain real speech — quietly drop it rather than
+      // sending near-silence to Whisper and getting back empty text
+      if (_recMediaRecorder && _recMediaRecorder.state !== 'inactive') _recMediaRecorder.stop();
+      return;
+    }
     btn.classList.add('transcribing');
     if (_recMediaRecorder && _recMediaRecorder.state !== 'inactive') _recMediaRecorder.stop();
     return;
@@ -629,6 +638,11 @@ async function toggleRecordAndTranscribe() {
   _recMediaRecorder.ondataavailable = e => { if (e.data.size > 0) _recChunks.push(e.data); };
   _recMediaRecorder.onstop = async () => {
     stream.getTracks().forEach(t => t.stop());
+    const recordingMs = Date.now() - _recStartTime;
+    if (recordingMs < MIN_RECORDING_MS || !_recChunks.length) {
+      btn.classList.remove('transcribing');
+      return;
+    }
     const blob = new Blob(_recChunks, { type: _recMediaRecorder.mimeType || 'audio/mp4' });
     const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
     const form = new FormData();
@@ -636,7 +650,14 @@ async function toggleRecordAndTranscribe() {
     try {
       const res = await fetch('/stt', { method: 'POST', body: form });
       const d = await res.json();
-      if (d.text) document.getElementById('vn-input').value = d.text;
+      const input = document.getElementById('vn-input');
+      if (d.text) {
+        input.value = d.text;
+      } else if (!input.value) {
+        // heard nothing usable — say so instead of leaving the field
+        // silently blank, which reads as broken rather than "try again"
+        input.placeholder = "didn't catch that — try again";
+      }
     } catch (err) {
       console.error('transcription request failed', err);
     }
@@ -644,7 +665,8 @@ async function toggleRecordAndTranscribe() {
   };
 
   document.getElementById('vn-input').value = '';
-  _recMediaRecorder.start();
+  _recStartTime = Date.now();
+  _recMediaRecorder.start(250); // periodic flush instead of only at stop() — more reliable on iOS Safari
   isRec = true;
   btn.classList.add('rec');
 }
