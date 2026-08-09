@@ -192,7 +192,7 @@
   /* Dialog box wrapper — sits at bottom */
   #vn-box {
     position: relative; z-index: 20;
-    width: 100%; padding: 0 0 28px;
+    width: 100%; padding: 0 0 70px;
   }
 
   /* Dialog area */
@@ -227,10 +227,14 @@
     text-shadow: 0 0 8px rgba(255,255,255,0.6), 0 0 18px rgba(255,255,255,0.25);
   }
 
-  /* Choices */
+  /* Choices — lives in normal document flow right after #vn-text now
+     (not a sibling of the tall #vn-dialog box), so it always sits right
+     under however many lines the text actually wraps to on this device,
+     instead of a fixed pixel offset that only matched one browser's
+     text-wrapping and overlapped the dialogue box artwork on others */
   #vn-opts {
     display: none; gap: 10px; flex-wrap: wrap; padding: 10px 0 0;
-    margin-top: -460px;
+    pointer-events: auto; /* #vn-content (parent) is pointer-events:none */
   }
   #vn-opts.on { display: flex; }
   .opt-btn {
@@ -428,9 +432,9 @@
       <div id="vn-content">
         <div id="vn-text"></div>
         <span id="vn-caret">▼</span>
+        <div id="vn-opts"></div>
       </div>
     </div>
-    <div id="vn-opts"></div>
   </div>
 
   <div id="vn-input-area">
