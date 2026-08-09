@@ -403,9 +403,9 @@ async function playGreetingAudio() {
 // rate stretched/compressed so the video finishes exactly when that
 // voice's line finishes — not a fixed length. stage4 loops as a generic
 // "loading" beat until the dish image itself is actually ready.
-const STAGE_VIDEOS    = ['stage1.mp4', 'stage22.mp4', 'stage3.mp4'];
-const STAGE_DURATIONS = [7.375, 14.375, 10.458]; // each file's own natural length, seconds
-const LOADING_VIDEO   = 'stage4.mp4';
+const STAGE_VIDEOS    = ['stage1.mp4', 'stage22.mp4', 'stage33.mp4'];
+const STAGE_DURATIONS = [7.375, 14.375, 10.375]; // each file's own natural length, seconds
+const LOADING_VIDEO   = 'stage44.mp4';
 
 async function playSyncedStage(videoSrc, naturalDuration, audioBase64) {
   const video = document.getElementById('show-video');
