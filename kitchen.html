@@ -730,7 +730,12 @@ async function runShow(state) {
   await postPhase('reading');
   const readingStart = Date.now();
   let cur = state;
+  // the backend now always falls back to plain-word tags on its own AI
+  // call failing, but this cap is a second line of defence — a live show
+  // should never be able to hang here forever, no matter what.
+  const MAX_TAGS_WAIT_MS = 60000;
   while (!cur?.emotionTags?.length) {
+    if (Date.now() - readingStart > MAX_TAGS_WAIT_MS) { cur = { emotionTags: ['memory'] }; break; }
     await sleep(900); cur = await pollState() || cur;
   }
   await showTags(cur.emotionTags);

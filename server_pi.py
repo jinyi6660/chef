@@ -570,10 +570,17 @@ def build_dish():
 
     relay_transcript = run_persona_relay(answers_text, on_first_turn=kickoff_image)
 
-    message = client.messages.create(
-        model="claude-opus-4-6",
-        max_tokens=1500,
-        system="""You are a creative emotional chef. Based on the guest's questionnaire, compose a unique dish just for them.
+    # kitchen.html's reading-phase wait loop polls /state until emotionTags
+    # is non-empty, with no timeout of its own — if this call throws
+    # (rate limit, quota, network) or returns malformed JSON, an unguarded
+    # exception here would leave emotionTags empty forever and strand the
+    # whole live show on that screen indefinitely. Fall back to a plain
+    # dish built directly from the guest's own words instead of failing.
+    try:
+        message = client.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=1500,
+            system="""You are a creative emotional chef. Based on the guest's questionnaire, compose a unique dish just for them.
 
 First, read the guest's answers carefully and identify the emotions and themes within them. You will also be shown what three kitchen AI voices (chef 1, chef 2, chef 3) already speculated about this guest in relay. Weigh their impressions alongside the guest's own words, then compose a dish inspired by what you found.
 
@@ -589,18 +596,30 @@ Reply strictly in JSON format, no other text. The JSON must have exactly these f
 }
 "emotionTags" must contain 3 to 6 actual words or very short phrases (1–2 words each) extracted DIRECTLY from the guest's own answers — concrete nouns, adjectives, colors, textures, or feelings they literally wrote. Do NOT invent poetic summaries. Keep them in the same language the guest used.
 "emotionVerdict" must be a single short poetic English phrase (3-6 words), in the form "a recipe for ___" or similar, summarising the guest's overall emotional state.""",
-        messages=[{
-            "role": "user",
-            "content": (
-                f"Guest questionnaire answers:\n{answers_text}\n\n"
-                f"Three AI voices already speculated about this guest:\n{relay_transcript}"
-            ),
-        }],
-    )
-
-    text = message.content[0].text
-    clean = text.replace("```json", "").replace("```", "").strip()
-    dish = json.loads(clean)
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Guest questionnaire answers:\n{answers_text}\n\n"
+                    f"Three AI voices already speculated about this guest:\n{relay_transcript}"
+                ),
+            }],
+        )
+        text = message.content[0].text
+        clean = text.replace("```json", "").replace("```", "").strip()
+        dish = json.loads(clean)
+        if not dish.get("emotionTags"):
+            raise ValueError("empty emotionTags")
+    except Exception:
+        fallback_tags = [w.strip(".,!?()").lower() for w in answers_text.split() if len(w) > 2][:5]
+        dish = {
+            "emotionTags": fallback_tags or ["memory"],
+            "emotionVerdict": "a recipe for memory",
+            "name": "The Guest's Cake",
+            "description": "A cake shaped by what was shared, built directly from the guest's own words.",
+            "cookTime": "25 min",
+            "price": "£14",
+            "barcode": "00000000",
+        }
 
     display_state["emotionTags"] = dish.get("emotionTags", [])
     display_state["dishName"] = dish.get("name", "")
