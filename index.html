@@ -393,9 +393,7 @@
 <!-- ── WELCOME ── -->
 <div class="screen on" id="s-welcome">
   <div class="wt-panels">
-    <div class="wt-left">
-      <p class="wt-intro" id="wt-intro"></p>
-    </div>
+    <div class="wt-left"></div>
     <div class="wt-right">
       <button class="wt-btn" onclick="startVN()">
         <span class="wt-btn-label">READY TO ORDER</span>
@@ -1101,12 +1099,6 @@ function newOrder() {
   fetch('/reset', { method: 'POST' }).catch(() => {});
 }
 
-// ── WELCOME ANIMATION ──
-setTimeout(() => {
-  typewrite(document.getElementById('wt-intro'),
-    'Welcome to Mystery Chef.\nHere, food is no longer only something to be eaten —\nbut something to be remembered, interpreted, and reconstructed.',
-    28);
-}, 600);
 </script>
 </body>
 </html>
