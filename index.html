@@ -756,7 +756,7 @@ function startVN() {
   speechSynthesis && speechSynthesis.cancel();
   vnStep = 0; vnAnswers = {};
   // fade out welcome, wait for images + 500ms black, then show consent
-  const consentText = 'By proceeding, you consent to being\nobserved, analysed, and emotionally\ninterpreted.\n\nYour responses will be used to prepare\na personalised dish. Certain emotional\ntraces may remain in the system after\nthis experience ends.';
+  const consentText = 'By proceeding, you consent to being\nobserved and analysed.\n\nYour responses will be used to prepare\na personalised dish. Certain emotional\ntraces may remain in the system after\nthis experience ends.';
   document.querySelectorAll('.screen.on').forEach(s => {
     s.classList.add('out'); s.classList.remove('on');
     setTimeout(() => s.classList.remove('out'), 400);
