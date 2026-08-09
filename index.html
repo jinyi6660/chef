@@ -773,12 +773,12 @@ function runStep() {
   inputArea.classList.remove('on');
   vnReady = false;
 
-  // start fetching this line's cloned-voice audio now, in parallel with
-  // the typewriter animation below, instead of only starting once typing
-  // finishes — by the time the text is done typing out, the audio is
-  // usually already ready to play instantly.
+  // start the voice line now, in parallel with the typewriter animation
+  // below, instead of only once typing finishes — the guest hears the
+  // line as the text is still appearing, the way it reads naturally,
+  // rather than watching the full line sit there in silence first.
   if (s.type === 'say' || s.type === 'ask' || s.type === 'submit') {
-    prefetchNarration(s.text);
+    speak(s.text);
   }
 
   // Update progress bar for question steps
@@ -796,7 +796,6 @@ function runStep() {
     typewrite(textEl, s.text, 30, () => {
       vnReady = true;
       caretEl.style.display = 'block';
-      speak(s.text);
     });
 
   } else if (s.type === 'choose') {
@@ -816,7 +815,6 @@ function runStep() {
 
   } else if (s.type === 'ask') {
     typewrite(textEl, s.text, 30, () => {
-      speak(s.text);
       document.getElementById('vn-input').placeholder = s.ph || '';
       document.getElementById('vn-input').value = '';
       openAnswerInput();
@@ -824,7 +822,6 @@ function runStep() {
 
   } else if (s.type === 'submit') {
     typewrite(textEl, s.text, 28, () => {
-      speak(s.text);
       const btn = document.createElement('button');
       btn.className = 'opt-btn primary';
       btn.style.width = '100%';
@@ -843,10 +840,11 @@ document.getElementById('s-vn').addEventListener('click', e => {
   if (s && s.type !== 'say') return;
 
   if (!vnReady) {
+    // voice for this line already started playing back in runStep() —
+    // tapping early just fast-forwards the text, not the audio again
     skipTypewriter(document.getElementById('vn-text'), s.text);
     document.getElementById('vn-caret').style.display = 'block';
     vnReady = true;
-    speak(s.text);
     return;
   }
   vnStep++;
