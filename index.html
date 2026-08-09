@@ -364,10 +364,8 @@
   .rc-tax { display:flex; justify-content:space-between; font-size:9px; letter-spacing:.22em; color:var(--gd); text-transform:uppercase; margin:8px 0 22px; }
   .rc-dot { width:100%; border-top:1px dotted rgba(107,159,255,.15); margin-bottom:18px; }
   .rc-actions { display:flex; flex-direction:column; align-items:center; gap:10px; flex-shrink:0; padding-top:16px; position:relative; z-index:1; }
-  .rc-btn { font-family:var(--mono); font-size:10px; letter-spacing:.22em; text-transform:uppercase; padding:11px 40px; cursor:pointer; transition:all .3s; background:transparent; border:1px solid rgba(107,159,255,.25); color:var(--g); }
-  .rc-btn:hover { background:rgba(107,159,255,.06); border-color:var(--g); }
-  .rc-btn.sec { border-color:transparent; color:var(--gd); font-size:9px; }
-  .rc-btn.sec:hover { color:var(--g); background:none; }
+  .rc-btn { font-family:var(--mono); font-size:10px; letter-spacing:.22em; text-transform:uppercase; padding:11px 40px; cursor:pointer; transition:all .3s; background:rgba(255,255,255,0.15); border:1px solid rgba(107,159,255,.25); color:var(--g); }
+  .rc-btn:hover { background:rgba(255,255,255,0.28); border-color:var(--g); }
 
   .cursor { display:inline-block; width:2px; height:.9em; background:var(--g); margin-left:3px; vertical-align:middle; animation:blink .8s step-end infinite; }
 
@@ -477,8 +475,7 @@
     </div>
   </div>
   <div class="rc-actions">
-    <button class="rc-btn" onclick="newOrder()">ORDER AGAIN</button>
-    <button class="rc-btn sec" onclick="newOrder()">FINISH</button>
+    <button class="rc-btn" onclick="newOrder()">Finish</button>
   </div>
 </div>
 
