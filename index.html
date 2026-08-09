@@ -192,7 +192,7 @@
   /* Dialog box wrapper — sits at bottom */
   #vn-box {
     position: relative; z-index: 20;
-    width: 100%; padding: 0 0 10px;
+    width: 100%; padding: 0 0 28px;
   }
 
   /* Dialog area */
@@ -210,6 +210,9 @@
     z-index: 1;
     padding: 92px 38px 20px 54px;
     overflow: hidden;
+    pointer-events: none; /* purely decorative text layer — must not block
+      taps on #vn-opts, which now overlaps this box's screen space after
+      being pulled up with a negative margin to sit right under the text */
   }
   #vn-text {
     font-size: 13px; line-height: 1.75; color: rgba(255,255,255,0.92);
