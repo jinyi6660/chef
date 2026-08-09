@@ -916,17 +916,20 @@ function resetKitchenAudioMirror() {
   audio.src = '';
 }
 
-function queueMirrorAudio(base64) {
-  _mirrorQueue.push(base64);
+function queueMirrorAudio(src) {
+  _mirrorQueue.push(src);
   playNextMirrorAudio();
 }
 
 async function playNextMirrorAudio() {
   if (_mirrorPlaying || !_mirrorQueue.length) return;
   _mirrorPlaying = true;
-  const base64 = _mirrorQueue.shift();
+  const src = _mirrorQueue.shift();
   const audio = document.getElementById('kitchen-audio');
-  audio.src = 'data:audio/mpeg;base64,' + base64;
+  // base64 TTS audio is always a long string; a short one is a plain
+  // static file path (e.g. the greeting bell sound effect) — play it
+  // directly instead of treating it as base64.
+  audio.src = src.length < 300 ? src : 'data:audio/mpeg;base64,' + src;
   await new Promise(resolve => {
     audio.addEventListener('ended', resolve, { once: true });
     audio.play().catch(resolve);
@@ -963,7 +966,10 @@ function updateKitchenAudioMirror(data) {
       _mirrorGreetingState = 'fetching';
       fetch('/state/voice').then(r => r.json()).then(d => {
         _mirrorGreetingState = 'resolved';
-        if (d.audio) queueMirrorAudio(d.audio);
+        if (d.audio) {
+          queueMirrorAudio(d.audio);
+          queueMirrorAudio('greeting_bell.wav');
+        }
         if (cookingStarted) flushMirrorRelay(lines);
       }).catch(() => {
         _mirrorGreetingState = 'resolved';
