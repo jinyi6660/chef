@@ -262,6 +262,7 @@
 <audio id="stage4-loop-audio" loop></audio>
 <audio id="stage4-end-audio"></audio>
 <audio id="stage123-ambient-audio" loop></audio>
+<audio id="reading-ambient-audio" src="reading_page_ambient.wav"></audio>
 
 <div id="bar">
   <span>MYSTERY CHEF</span>
@@ -724,6 +725,14 @@ async function runShow(state) {
   // now reveal the paper book — prompts + guest's input appear on it
   revealStage();
 
+  // soft page-rustle ambience under the whole reading phase — its own
+  // ~30s length roughly matches MIN_READING_MS below, so it plays through
+  // once rather than looping
+  const readingAmbient = document.getElementById('reading-ambient-audio');
+  readingAmbient.volume = 0.12;
+  readingAmbient.currentTime = 0;
+  readingAmbient.play().catch(() => {});
+
   // 3 — right page handled by the AE overlay video (method-video, looping
   // already); left page grows the guest's own extracted words on the plate
   setPhase('READING');
@@ -752,6 +761,7 @@ async function runShow(state) {
   if (!mv.ended) {
     await new Promise(resolve => mv.addEventListener('ended', resolve, { once: true }));
   }
+  readingAmbient.pause();
   hideStage(); // book fades out for real, not just covered by the opaque video on top of it
   setPhase('COOKING');
   await postPhase('cooking');
