@@ -259,6 +259,8 @@
 
 <audio id="voice-audio"></audio>
 <audio id="relay-audio"></audio>
+<audio id="stage4-loop-audio" loop></audio>
+<audio id="stage4-end-audio"></audio>
 
 <div id="bar">
   <span>MYSTERY CHEF</span>
@@ -456,6 +458,15 @@ async function playLoadingStage(videoSrc, isDone) {
   video.load();
   try { await video.play(); } catch {}
 
+  // "microwave on/run" loops for as long as the image is still generating
+  // (unknown length — a few seconds to a few minutes), then the "off +
+  // beeps" tail plays once as soon as it's actually ready, instead of
+  // trying to time-stretch one fixed-length clip to an unpredictable wait.
+  const loopAudio = document.getElementById('stage4-loop-audio');
+  loopAudio.src = 'stage4_loop.wav';
+  loopAudio.currentTime = 0;
+  try { await loopAudio.play(); } catch {}
+
   // the backend retries image generation up to 3 times on failure — each
   // attempt is a prompt-writing call plus the image call itself, and
   // gpt-image-2 alone can take 60-90s+, so a single retry can easily push
@@ -468,6 +479,12 @@ async function playLoadingStage(videoSrc, isDone) {
     if (Date.now() - waitStart > MAX_IMAGE_WAIT_MS) break;
     await sleep(500);
   }
+
+  loopAudio.pause();
+  loopAudio.loop = false;
+  const endAudio = document.getElementById('stage4-end-audio');
+  endAudio.src = 'stage4_end.wav';
+  endAudio.play().catch(() => {});
 
   // reveal the actual generated dish image in place of the loading video,
   // and leave it up — this is the final beat, never falls back to the book
