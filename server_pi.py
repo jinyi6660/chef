@@ -31,6 +31,12 @@ display_state = {
     # instead of the raw backend `status` before showing the receipt.
     "showPhase": "idle",   # idle | greeting | pageturn | reading | cooking | done
     "greetingAudio": None,
+    # bumped by /reset — kitchen.html, order.html, and receipt.html all
+    # watch this and hard-reload themselves when it changes, so clicking
+    # Finish gives every screen a genuinely clean slate (no leftover JS
+    # state/stuck audio/timers) for the next guest instead of trying to
+    # softly reset each screen's own in-memory state.
+    "resetSignal": 0,
 }
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -88,6 +94,7 @@ def reset_state():
         "relayLines": [],
         "showPhase": "idle",
         "greetingAudio": None,
+        "resetSignal": display_state.get("resetSignal", 0) + 1,
     })
     return jsonify({"status": "reset"})
 

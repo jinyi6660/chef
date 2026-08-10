@@ -406,6 +406,24 @@
 
 </div><!-- #app -->
 <script>
+// ── HARD RELOAD ON FINISH ────────────────────────────────────
+// server bumps resetSignal every time /reset is called (guest tapping
+// Finish on the receipt screen) — reload this screen entirely rather
+// than trying to softly reset every piece of in-memory JS state (stuck
+// timers, audio elements mid-playback, etc), giving every screen a truly
+// clean slate for the next guest.
+let _knownResetSignal = null;
+setInterval(async () => {
+  try {
+    const r = await fetch('/state');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.resetSignal === undefined) return;
+    if (_knownResetSignal === null) { _knownResetSignal = d.resetSignal; return; }
+    if (d.resetSignal !== _knownResetSignal) location.reload();
+  } catch {}
+}, 3000);
+
 // ── PRELOAD IMAGES ──
 function loadImg(src) {
   return new Promise(res => {

@@ -197,6 +197,23 @@
 <script>
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// ── HARD RELOAD ON FINISH ────────────────────────────────────
+// server bumps resetSignal every time /reset is called (including this
+// screen's own Finish button) — reload this screen entirely rather than
+// relying only on finishOrder()'s manual soft-reset, so a stray stuck
+// timer/audio element can never carry over to the next guest.
+let _knownResetSignal = null;
+setInterval(async () => {
+  try {
+    const r = await fetch('/state');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.resetSignal === undefined) return;
+    if (_knownResetSignal === null) { _knownResetSignal = d.resetSignal; return; }
+    if (d.resetSignal !== _knownResetSignal) location.reload();
+  } catch {}
+}, 3000);
+
 // ── CLOCK ──
 setInterval(() => {
   document.getElementById('st-clock').textContent = new Date().toTimeString().slice(0,8);
