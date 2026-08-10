@@ -690,11 +690,7 @@ function primeNarrationAudio() {
 function startVN() {
   primeNarrationAudio();
   speechSynthesis && speechSynthesis.cancel();
-  speak('Hello, welcome to this restaurant.').then(() => {
-    return speak("I'll be your server today, jinyi.");
-  }).then(() => {
-    speak('Please read our agreement carefully.');
-  });
+  speak("Hello, welcome to this restaurant. I'll be your server today, jinyi. Please read our agreement carefully.");
   vnStep = 0; vnAnswers = {};
   const consentText = 'By proceeding, you consent to being\nobserved and analysed.\n\nYour responses will be used to prepare\na personalised dish. Certain emotional\ntraces may remain in the system after\nthis experience ends.';
   document.querySelectorAll('.screen.on').forEach(s => {
