@@ -460,27 +460,40 @@ function prefetchNarration(text) {
   }
   return _narrationCache[cleanText];
 }
+// returns a promise that resolves once the line has actually finished
+// being spoken, so callers that need two lines in sequence (not
+// overlapping) can just `await speak(line1); await speak(line2);`
+// — existing fire-and-forget callers are unaffected since they don't
+// await the return value.
 function speak(text) {
   const cleanText = text.replace(/\n/g, ' ');
   if (window.speechSynthesis) speechSynthesis.cancel();
-  prefetchNarration(cleanText).then(audio => {
-    if (audio) playClonedVoice(audio);
-    else speakFallback(cleanText);
+  return prefetchNarration(cleanText).then(audio => {
+    return audio ? playClonedVoice(audio) : speakFallback(cleanText);
   });
 }
 function playClonedVoice(base64) {
-  const audio = new Audio('data:audio/mpeg;base64,' + base64);
-  audio.play().catch(() => {});
+  return new Promise(resolve => {
+    const audio = new Audio('data:audio/mpeg;base64,' + base64);
+    audio.addEventListener('ended', resolve, { once: true });
+    audio.play().catch(resolve);
+    setTimeout(resolve, 15000); // safety cap if playback stalls
+  });
 }
 function speakFallback(text) {
-  if (!window.speechSynthesis) return;
-  speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.lang = 'en-US'; utt.rate = 0.85; utt.pitch = 0.72;
-  const v = _voices.find(v => v.lang.startsWith('en') && /google|alex|samantha/i.test(v.name))
-         || _voices.find(v => v.lang.startsWith('en'));
-  if (v) utt.voice = v;
-  speechSynthesis.speak(utt);
+  return new Promise(resolve => {
+    if (!window.speechSynthesis) { resolve(); return; }
+    speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.lang = 'en-US'; utt.rate = 0.85; utt.pitch = 0.72;
+    const v = _voices.find(v => v.lang.startsWith('en') && /google|alex|samantha/i.test(v.name))
+           || _voices.find(v => v.lang.startsWith('en'));
+    if (v) utt.voice = v;
+    utt.onend = resolve;
+    utt.onerror = resolve;
+    speechSynthesis.speak(utt);
+    setTimeout(resolve, 15000);
+  });
 }
 
 // ── STT ──
@@ -662,7 +675,9 @@ let vnReady = false;
 
 function startVN() {
   speechSynthesis && speechSynthesis.cancel();
-  speak('Hello, welcome to this restaurant.');
+  speak('Hello, welcome to this restaurant.').then(() => {
+    speak('Please read our agreement carefully.');
+  });
   vnStep = 0; vnAnswers = {};
   const consentText = 'By proceeding, you consent to being\nobserved and analysed.\n\nYour responses will be used to prepare\na personalised dish. Certain emotional\ntraces may remain in the system after\nthis experience ends.';
   document.querySelectorAll('.screen.on').forEach(s => {
