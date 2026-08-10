@@ -229,20 +229,20 @@
      the spoken audio is hard to hear in the exhibition space — sits on
      top of the dialogue.png artwork instead of a flat box */
   #relay-caption-wrap {
-    position: absolute; left: 42%; bottom: 4%; transform: translateX(-50%);
-    width: 70%; max-width: 760px;
-    aspect-ratio: 3508 / 2480;
+    position: absolute; left: 42%; bottom: 1.5%; transform: translateX(-50%);
+    width: 38%; max-width: 420px;
+    height: 260px;
     background: url('dialogue.png') center center / contain no-repeat;
     z-index: 820;
     display: flex; align-items: center; justify-content: center;
-    padding: 4% 10%;
+    padding: 4% 8%;
     opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
   }
   #relay-caption-wrap.on { opacity: 1; }
   #relay-caption {
     text-align: center;
     font-family: 'Courier Prime', monospace;
-    font-size: 20px; line-height: 1.5; color: #fff;
+    font-size: 15px; line-height: 1.45; color: #fff;
     text-shadow: 0 1px 3px rgba(0,0,0,0.8);
   }
 
