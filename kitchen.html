@@ -371,14 +371,13 @@ function revealStage() {
   setTimeout(() => {
     mv.play().catch(() => {});
     // recipe narration starts in the exact same beat as the text-overlay
-    // video, sped up to finish exactly when that video's one (non-looping)
-    // pass does — 16s file at 0.5x = 32s real time — so the voice and the
-    // on-screen text stay together instead of drifting against each other
+    // video, at its own natural pace (speeding it up to match the video's
+    // ~32s length made it sound rushed) — runShow() below now holds the
+    // reading page open until this finishes too, not just the video, so
+    // nothing gets cut off even though the narration outlasts one pass
+    // of the (non-looping) video.
     const narration = document.getElementById('recipe-narration-audio');
-    if (narration.duration && isFinite(narration.duration)) {
-      const videoRealSeconds = 16 / 0.5;
-      narration.playbackRate = Math.max(0.5, Math.min(3, narration.duration / videoRealSeconds));
-    }
+    narration.playbackRate = 1;
     narration.currentTime = 0;
     narration.play().catch(() => {});
   }, 1200);
@@ -857,10 +856,20 @@ async function runShow(state) {
   if (readingElapsed < MIN_READING_MS) await sleep(MIN_READING_MS - readingElapsed);
 
   // 4 — once the method text video itself has finished playing, follow
-  // it with 合成3 in full (no cutting it short, no looping/conditions)
+  // it with 合成3 in full (no cutting it short, no looping/conditions).
+  // The narration plays at natural (unsped-up) pace and is usually
+  // longer than the video's one pass, so also hold here until it's
+  // actually finished talking — otherwise it would get cut off mid-line
+  // the moment the (shorter, silent) video ends.
   const mv = document.getElementById('method-video');
   if (!mv.ended) {
     await new Promise(resolve => mv.addEventListener('ended', resolve, { once: true }));
+  }
+  if (!recipeNarration.ended && !recipeNarration.paused) {
+    await new Promise(resolve => {
+      recipeNarration.addEventListener('ended', resolve, { once: true });
+      setTimeout(resolve, 20000); // safety cap if playback ever stalls
+    });
   }
   readingAmbient.pause();
   recipeNarration.pause();
@@ -913,6 +922,14 @@ async function startDemo() {
   if (!mv.ended) {
     await new Promise(resolve => mv.addEventListener('ended', resolve, { once: true }));
   }
+  const recipeNarrationDemo = document.getElementById('recipe-narration-audio');
+  if (!recipeNarrationDemo.ended && !recipeNarrationDemo.paused) {
+    await new Promise(resolve => {
+      recipeNarrationDemo.addEventListener('ended', resolve, { once: true });
+      setTimeout(resolve, 20000);
+    });
+  }
+  recipeNarrationDemo.pause();
   hideStage();
   setPhase('DEMO — COOKING');
   await playCookingStages();
