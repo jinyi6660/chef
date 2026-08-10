@@ -370,6 +370,17 @@ function revealStage() {
   mv.playbackRate = 0.5;
   setTimeout(() => {
     mv.play().catch(() => {});
+    // recipe narration starts in the exact same beat as the text-overlay
+    // video, sped up to finish exactly when that video's one (non-looping)
+    // pass does — 16s file at 0.5x = 32s real time — so the voice and the
+    // on-screen text stay together instead of drifting against each other
+    const narration = document.getElementById('recipe-narration-audio');
+    if (narration.duration && isFinite(narration.duration)) {
+      const videoRealSeconds = 16 / 0.5;
+      narration.playbackRate = Math.max(0.5, Math.min(3, narration.duration / videoRealSeconds));
+    }
+    narration.currentTime = 0;
+    narration.play().catch(() => {});
   }, 1200);
 }
 
@@ -818,11 +829,10 @@ async function runShow(state) {
   readingAmbient.play().catch(() => {});
 
   // the recipe/method text read aloud in the cloned voice, under the
-  // ambience above
+  // ambience above — actually started inside revealStage() itself, timed
+  // to the exact same beat as the text-overlay video so they stay synced
   const recipeNarration = document.getElementById('recipe-narration-audio');
   recipeNarration.volume = 0.8;
-  recipeNarration.currentTime = 0;
-  recipeNarration.play().catch(() => {});
 
   // 3 — right page handled by the AE overlay video (method-video, looping
   // already); left page grows the guest's own extracted words on the plate
