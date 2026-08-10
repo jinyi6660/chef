@@ -882,7 +882,7 @@ function updateKitchenAudioMirror(data) {
   // right before it starts its own per-chef video+audio sequence.
   const cookingStarted = data.showPhase === 'cooking' || data.showPhase === 'done';
 
-  handleMirrorPhaseTransition(data);
+  try { handleMirrorPhaseTransition(data); } catch (err) { console.error('mirror phase handler failed', err); }
 
   // once all 3 chefs have been queued, kitchen.html moves on from the
   // stage1-3 ambience into the stage4 "generating image" loop/end sounds
@@ -938,7 +938,31 @@ let _pollTimer = null;
 
 const ORDER_SENT_LINE = "That's all? Thank you for your order — please don't take off your headphones.";
 
+// Safari/iOS only allows an <audio> element to autoplay later (from a
+// setInterval/fetch callback, not a direct tap) once THAT SPECIFIC
+// element has already been played from within a real user gesture at
+// least once. kitchen-audio happened to get this "unlock" for free
+// because its very first queued play landed close enough to the submit
+// tap, but the newer ambience/narration elements never got one — their
+// first real .play() call (from inside the phase-polling loop) was
+// silently rejected every time, which is why they never made any sound
+// at all rather than just being late. Play+immediately-pause every
+// mirror <audio> element right here, still inside the tap itself.
+function primeMirrorAudioElements() {
+  ['kitchen-audio', 'mirror-pageturn-audio', 'mirror-reading-ambient-audio',
+   'mirror-recipe-narration-audio', 'mirror-stage123-ambient-audio',
+   'mirror-stage4-loop-audio', 'mirror-stage4-end-audio'].forEach(id => {
+    const a = document.getElementById(id);
+    if (!a) return;
+    const p = a.play();
+    if (p && p.catch) p.catch(() => {});
+    a.pause();
+    a.currentTime = 0;
+  });
+}
+
 async function triggerBuild() {
+  primeMirrorAudioElements();
   setStatus('PROCESSING');
   show('s-loading');
   resetKitchenAudioMirror();
@@ -995,7 +1019,7 @@ function pollUntilDone() {
         setTimeout(returnToWelcome, 1800);
       }
     }).catch(() => {});
-  }, 2000);
+  }, 700); // was 2000 — that much delay on every phase change read as badly out of sync
 }
 
 function returnToWelcome() {
