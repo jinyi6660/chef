@@ -896,6 +896,7 @@ async function startDemo() {
   resetDisplay();
   hideStage();
   setIdle(false);
+  document.getElementById('idle-dim').classList.remove('on');
 
   // same standby-frame -> back1.mp4 -> reveal sequence as the real flow,
   // no backend/API calls involved — press T anytime to iterate on this
