@@ -622,7 +622,7 @@ async function playLoadingStage(videoSrc, isDone) {
   // total time past a minute and a half. Cap generously so a legitimately
   // slow-but-working generation doesn't get cut off before it finishes;
   // still bounded so a truly failed image can't hang the show forever.
-  const MAX_IMAGE_WAIT_MS = 330000;
+  const MAX_IMAGE_WAIT_MS = 100000; // ~100s — long enough for a normal (20-70s) generation, short enough that a live audience isn't left waiting minutes on a failure
   const waitStart = Date.now();
   while (!(await isDone())) {
     if (Date.now() - waitStart > MAX_IMAGE_WAIT_MS) break;
