@@ -207,9 +207,14 @@
     font-size: 14px; color: rgba(255,255,255,0.85);
     text-shadow: 0 0 8px rgba(255,255,255,0.6), 0 0 18px rgba(255,255,255,0.25);
   }
+  /* independent of the dialogue box/text entirely now — anchored to the
+     screen itself, centered a bit above the bottom edge, so it can't end
+     up inside the dialogue artwork regardless of how the text wraps */
   #vn-opts {
-    display: none; gap: 10px; flex-wrap: wrap; padding: 10px 0 0;
-    pointer-events: auto;
+    display: none; gap: 10px; flex-wrap: wrap;
+    position: absolute; left: 0; right: 0; bottom: 70px;
+    justify-content: center; padding: 0 24px;
+    z-index: 40;
   }
   #vn-opts.on { display: flex; }
   .opt-btn {
@@ -344,10 +349,11 @@
       <div id="vn-content">
         <div id="vn-text"></div>
         <span id="vn-caret">▼</span>
-        <div id="vn-opts"></div>
       </div>
     </div>
   </div>
+
+  <div id="vn-opts"></div>
 
   <div id="vn-input-area">
     <div id="vn-row">
