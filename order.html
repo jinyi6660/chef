@@ -837,10 +837,19 @@ function updateKitchenAudioMirror(data) {
 // ── BUILD ──
 let _pollTimer = null;
 
+const ORDER_SENT_LINE = "That's all? Thank you for your order — please don't take off your headphones.";
+
 async function triggerBuild() {
   setStatus('PROCESSING');
   show('s-loading');
   resetKitchenAudioMirror();
+  // guest-facing line, queued first so it plays ahead of the kitchen's
+  // own "hey chef" greeting in the same sequential audio queue — fetched
+  // straight into the mirror queue rather than through speak() so it
+  // can't race/overlap with the greeting that follows it
+  prefetchNarration(ORDER_SENT_LINE).then(audio => {
+    if (audio) queueMirrorAudio(audio);
+  });
 
   await submitBuildWithRetry();
   pollUntilDone();

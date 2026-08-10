@@ -748,6 +748,7 @@ NARRATION_LINES = [
     "Who did you eat it with, and where?",
     "Your memory file has been received.  The chef will now begin.",
     GREETING_LINE,
+    "That's all? Thank you for your order — please don't take off your headphones.",
 ]
 threading.Thread(target=prewarm_narration_cache, args=(NARRATION_LINES,), daemon=True).start()
 
