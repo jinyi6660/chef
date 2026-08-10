@@ -487,11 +487,17 @@ async function postPhase(phase) {
 // polls briefly since it's generated in the background and may not be
 // ready the instant the order comes in.
 async function playGreetingAudio() {
+  // this line is cached after its first-ever successful generation, but
+  // right after a fresh deploy (cache wiped) or if ElevenLabs is just
+  // being slow that moment, the very first call can genuinely take
+  // several seconds (it falls back to OpenAI TTS only after ElevenLabs
+  // itself times out) — 6s of patience wasn't enough and the greeting
+  // would just silently never play for that guest.
   let d = null;
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 25; i++) {
     try { d = await fetch('/state/voice').then(r => r.json()); } catch {}
     if (d && d.audio) break;
-    await sleep(600);
+    await sleep(800);
   }
   if (!d || !d.audio) return;
   const audio = document.getElementById('voice-audio');

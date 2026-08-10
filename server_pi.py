@@ -151,7 +151,11 @@ def tts(text, voice):
 
 def elevenlabs_tts(text):
     """Speaks text with the cloned ElevenLabs voice ("jinyi"), returns
-    base64 audio or None on failure (missing key, network error, etc)."""
+    base64 audio or None on failure (missing key, network error, etc).
+    voice_tts() below falls back to OpenAI TTS only after this fails/
+    times out — a short-ish timeout matters here so a live show doesn't
+    end up waiting the full 30s on a slow ElevenLabs response before
+    even trying the fallback."""
     if not ELEVENLABS_API_KEY:
         return None
     try:
@@ -166,7 +170,7 @@ def elevenlabs_tts(text):
                 "model_id": "eleven_multilingual_v2",
                 "voice_settings": {"stability": 0.5, "similarity_boost": 0.75, "speed": 0.85},
             },
-            timeout=30,
+            timeout=12,
         )
         resp.raise_for_status()
         return base64.b64encode(resp.content).decode("utf-8")
