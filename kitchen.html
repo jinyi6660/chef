@@ -226,23 +226,27 @@
   #dish-reveal.on { opacity: 1; }
 
   /* captions the three chefs' relay commentary during stage1-3, in case
-     the spoken audio is hard to hear in the exhibition space — sits on
-     top of the dialogue.png artwork instead of a flat box */
+     the spoken audio is hard to hear in the exhibition space — a
+     full-width banner that slides in from the left edge for each line
+     and slides back out before the next one, rather than a small boxed
+     caption sitting on the dialogue.png artwork */
   #relay-caption-wrap {
-    position: absolute; left: 42%; bottom: 1.5%; transform: translateX(-50%);
-    width: 38%; max-width: 420px;
-    height: 260px;
-    background: url('dialogue.png') center center / contain no-repeat;
+    position: absolute; left: 0; right: 0; bottom: 6%;
+    width: 100%;
+    background: rgba(0,0,0,0.68);
+    border-top: 1px solid rgba(255,255,255,0.18);
+    border-bottom: 1px solid rgba(255,255,255,0.18);
     z-index: 820;
-    display: flex; align-items: center; justify-content: center;
-    padding: 4% 8%;
-    opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
+    padding: 16px 6%;
+    pointer-events: none;
+    transform: translateX(-100%);
+    transition: transform 0.45s ease;
   }
-  #relay-caption-wrap.on { opacity: 1; }
+  #relay-caption-wrap.on { transform: translateX(0); }
   #relay-caption {
-    text-align: center;
+    text-align: left;
     font-family: 'Courier Prime', monospace;
-    font-size: 15px; line-height: 1.45; color: #fff;
+    font-size: 22px; line-height: 1.45; color: #fff;
     text-shadow: 0 1px 3px rgba(0,0,0,0.8);
   }
 
