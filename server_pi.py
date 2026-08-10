@@ -447,13 +447,10 @@ def call_persona(persona, context):
                 return ""
 
 
-def run_persona_relay(answers_text, on_first_turn=None):
+def run_persona_relay(answers_text):
     """Runs the 2-3 persona relay sequentially, across both Claude and
     OpenAI, updating display_state["relayLines"] after each turn so the
     display can show lines landing one at a time instead of all at once.
-    After chef 1's turn (index 0), on_first_turn(line) is called if given
-    — used to kick off image generation as soon as the age guess exists,
-    rather than waiting for chefs 2 and 3 too.
 
     Always appends exactly one relayLines entry per persona, even on
     failure (empty text/audio) — kitchen.html maps STAGE_VIDEOS[i] to
@@ -462,7 +459,7 @@ def run_persona_relay(answers_text, on_first_turn=None):
     display_state["relayLines"] = []
     transcript = ""
 
-    for idx, persona in enumerate(PERSONAS):
+    for persona in PERSONAS:
         context = f"Guest's food memory answers:\n{answers_text}"
         if transcript:
             context += f"\n\nWhat's been said so far:\n{transcript}"
@@ -475,9 +472,6 @@ def run_persona_relay(answers_text, on_first_turn=None):
         ]
         if line:
             transcript += ("\n\n" if transcript else "") + line
-
-        if idx == 0 and on_first_turn:
-            on_first_turn(line)
 
     return transcript
 
@@ -597,32 +591,31 @@ def build_dish():
         daemon=True
     ).start()
 
+    # Image generation used to wait for chef 1's turn in the relay (for
+    # their age guess, used for the candle count) before starting — that
+    # meant it wasn't actually running from the moment the guest hit
+    # submit. It now kicks off immediately, in parallel with the relay
+    # from t=0, using the same default age (25) extract_age_guess() would
+    # fall back to anyway when nothing usable is found — losing a little
+    # personalization on the candle count in exchange for the image
+    # having the maximum possible head start.
+    threading.Thread(
+        target=generate_dish_image_early,
+        args=(answers_text, extract_age_guess("")),
+        daemon=True
+    ).start()
+
     # Three AI voices (mixing Claude + OpenAI) speculate about the guest in
     # relay, each building on the last. The transcript then feeds the final
-    # dish-generation call below, alongside the guest's own words. Dish
-    # image generation kicks off right after chef 1's turn (as soon as the
-    # age guess exists, for the candle count) rather than waiting for the
-    # whole relay, so it still overlaps with chefs 2 and 3.
-    image_kicked_off = False
-
-    def kickoff_image(chef1_line):
-        nonlocal image_kicked_off
-        image_kicked_off = True
-        age_guess = extract_age_guess(chef1_line)
-        threading.Thread(
-            target=generate_dish_image_early,
-            args=(answers_text, age_guess),
-            daemon=True
-        ).start()
-
+    # dish-generation call below, alongside the guest's own words.
+    #
     # a crash anywhere in the 3-persona relay (not just a single failed
     # call, which call_persona() already retries/swallows) would otherwise
     # take the whole order down with an unhandled 500 — kitchen.html's
     # own "no relayLines yet" warning is only a soft skip, so make sure
-    # this can never throw all the way out and abort everything after it
-    # (dish generation, emotion tags, the image kickoff already threaded).
+    # this can never throw all the way out and abort everything after it.
     try:
-        relay_transcript = run_persona_relay(answers_text, on_first_turn=kickoff_image)
+        relay_transcript = run_persona_relay(answers_text)
     except Exception as e:
         print(f"[persona relay CRASHED] {type(e).__name__}: {e}", flush=True)
         relay_transcript = ""
@@ -630,11 +623,6 @@ def build_dish():
             display_state["relayLines"] = [
                 {"persona": p["name"], "text": "", "audio": None} for p in PERSONAS
             ]
-
-    # relay crashed before ever reaching chef 1's turn — the image would
-    # otherwise never start generating at all, not even late
-    if not image_kicked_off:
-        kickoff_image("")
 
     # kitchen.html's reading-phase wait loop polls /state until emotionTags
     # is non-empty, with no timeout of its own — if this call throws
