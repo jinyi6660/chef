@@ -334,7 +334,7 @@
      — a persistent element unlocked once by a direct tap, instead of a
      new Audio() per line, which Safari never actually unlocks for later
      programmatic (post-fetch) playback -->
-<audio id="narration-audio"></audio>
+<audio id="narration-audio" src="greeting_bell.wav"></audio>
 
 <div id="statusbar">
   <span>PLEASE ORDER USING THE MENU</span>
@@ -998,10 +998,15 @@ function primeMirrorAudioElements() {
    'mirror-stage4-loop-audio', 'mirror-stage4-end-audio'].forEach(id => {
     const a = document.getElementById(id);
     if (!a) return;
+    // muted so priming is silent even if playback genuinely starts
+    // before pause() lands, and we wait for the real play() promise
+    // (not just call+immediately-pause) since pausing before playback
+    // has actually begun doesn't reliably count as a real unlock
+    a.muted = true;
     const p = a.play();
-    if (p && p.catch) p.catch(() => {});
-    a.pause();
-    a.currentTime = 0;
+    const finish = () => { a.pause(); a.currentTime = 0; a.muted = false; };
+    if (p && p.then) p.then(finish).catch(finish);
+    else finish();
   });
 }
 
