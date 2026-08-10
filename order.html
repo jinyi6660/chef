@@ -309,6 +309,10 @@
 <body>
 <div id="app">
 
+<!-- plays the kitchen display's greeting + relay voices on this iPad too,
+     for headphones plugged in here while the guest waits on this screen -->
+<audio id="kitchen-audio"></audio>
+
 <div id="statusbar">
   <span>PLEASE ORDER USING THE MENU</span>
   <span id="st-label">STANDBY</span>
@@ -734,12 +738,109 @@ function submitAnswer() {
   runStep();
 }
 
+// ── KITCHEN AUDIO MIRROR ──
+// headphones are plugged into this iPad, so it plays the same greeting +
+// relay voices in parallel, driven by the same /state polling already
+// used to wait for showPhase. Not frame-synced to kitchen.html's video —
+// just triggered by the same phase data.
+//
+// Greeting order matters: fetching it is a separate async request
+// (/state/voice), while relay lines arrive synchronously inside /state.
+// If relay lines are queued as soon as they're seen, they'd win that race
+// every time and the greeting would play last instead of first — so relay
+// lines are held back until the greeting is either fetched or confirmed
+// absent/timed-out.
+let _mirrorGreetingState = 'pending'; // 'pending' | 'fetching' | 'resolved'
+let _mirrorRelayPlayed = 0;
+let _mirrorQueue = [];
+let _mirrorPlaying = false;
+let _mirrorStartTime = 0;
+const MIRROR_GREETING_TIMEOUT_MS = 10000;
+
+function resetKitchenAudioMirror() {
+  _mirrorGreetingState = 'pending';
+  _mirrorRelayPlayed = 0;
+  _mirrorQueue = [];
+  _mirrorPlaying = false;
+  _mirrorStartTime = Date.now();
+  const audio = document.getElementById('kitchen-audio');
+  audio.pause();
+  audio.src = '';
+}
+
+function queueMirrorAudio(src) {
+  _mirrorQueue.push(src);
+  playNextMirrorAudio();
+}
+
+async function playNextMirrorAudio() {
+  if (_mirrorPlaying || !_mirrorQueue.length) return;
+  _mirrorPlaying = true;
+  const src = _mirrorQueue.shift();
+  const audio = document.getElementById('kitchen-audio');
+  // base64 TTS audio is always a long string; a short one is a plain
+  // static file path (e.g. the greeting bell sound effect).
+  audio.src = src.length < 300 ? src : 'data:audio/mpeg;base64,' + src;
+  await new Promise(resolve => {
+    audio.addEventListener('ended', resolve, { once: true });
+    audio.play().catch(resolve);
+    setTimeout(resolve, 20000);
+  });
+  _mirrorPlaying = false;
+  playNextMirrorAudio();
+}
+
+function flushMirrorRelay(lines) {
+  if (lines.length > _mirrorRelayPlayed) {
+    for (let i = _mirrorRelayPlayed; i < lines.length; i++) {
+      if (lines[i] && lines[i].audio) queueMirrorAudio(lines[i].audio);
+    }
+    _mirrorRelayPlayed = lines.length;
+  }
+}
+
+function updateKitchenAudioMirror(data) {
+  const lines = data.relayLines || [];
+  // relayLines is usually already full long before kitchen.html actually
+  // starts playing chef 1's video+audio (it's much slower — greeting,
+  // pageturn, reading all come first). Hold relay playback back until
+  // kitchen.html has posted the same 'cooking' phase transition it uses
+  // right before it starts its own per-chef video+audio sequence.
+  const cookingStarted = data.showPhase === 'cooking' || data.showPhase === 'done';
+
+  if (_mirrorGreetingState === 'pending') {
+    if (data.hasGreetingAudio) {
+      _mirrorGreetingState = 'fetching';
+      fetch('/state/voice').then(r => r.json()).then(d => {
+        _mirrorGreetingState = 'resolved';
+        if (d.audio) {
+          queueMirrorAudio(d.audio);
+          queueMirrorAudio('greeting_bell.wav');
+        }
+        if (cookingStarted) flushMirrorRelay(lines);
+      }).catch(() => {
+        _mirrorGreetingState = 'resolved';
+        if (cookingStarted) flushMirrorRelay(lines);
+      });
+      return;
+    }
+    if (Date.now() - _mirrorStartTime < MIRROR_GREETING_TIMEOUT_MS) {
+      return;
+    }
+    _mirrorGreetingState = 'resolved';
+  }
+
+  if (_mirrorGreetingState === 'fetching') return;
+  if (cookingStarted) flushMirrorRelay(lines);
+}
+
 // ── BUILD ──
 let _pollTimer = null;
 
 async function triggerBuild() {
   setStatus('PROCESSING');
   show('s-loading');
+  resetKitchenAudioMirror();
 
   await submitBuildWithRetry();
   pollUntilDone();
@@ -776,6 +877,7 @@ function pollUntilDone() {
   clearInterval(_pollTimer);
   _pollTimer = setInterval(() => {
     fetch('/state').then(r => r.json()).then(data => {
+      updateKitchenAudioMirror(data);
       // wait for the kitchen display's own performance to finish
       // (showPhase), not just the raw backend generation status — the
       // guest's receipt is waiting for them on the receipt screen once

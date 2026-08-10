@@ -154,10 +154,6 @@
 <body>
 <div id="app">
 
-<!-- plays the kitchen display's greeting + relay voices on this phone too,
-     for headphones plugged in here while the guest waits for their receipt -->
-<audio id="kitchen-audio"></audio>
-
 <div id="statusbar">
   <span>MYSTERY CHEF v3.0 — RECEIPT</span>
   <span id="st-label">STANDBY</span>
@@ -220,87 +216,6 @@ function show(id) {
   next.classList.add('on');
 }
 
-// ── KITCHEN AUDIO MIRROR ──
-// mini PC inside the oven prop has no headphone access, so this phone
-// (which does) plays the same greeting + relay voices in parallel, driven
-// by the same /state polling already used to wait for the receipt.
-let _mirrorGreetingState = 'pending'; // 'pending' | 'fetching' | 'resolved'
-let _mirrorRelayPlayed = 0;
-let _mirrorQueue = [];
-let _mirrorPlaying = false;
-let _mirrorStartTime = 0;
-const MIRROR_GREETING_TIMEOUT_MS = 10000;
-
-function resetKitchenAudioMirror() {
-  _mirrorGreetingState = 'pending';
-  _mirrorRelayPlayed = 0;
-  _mirrorQueue = [];
-  _mirrorPlaying = false;
-  _mirrorStartTime = Date.now();
-  const audio = document.getElementById('kitchen-audio');
-  audio.pause();
-  audio.src = '';
-}
-
-function queueMirrorAudio(src) {
-  _mirrorQueue.push(src);
-  playNextMirrorAudio();
-}
-
-async function playNextMirrorAudio() {
-  if (_mirrorPlaying || !_mirrorQueue.length) return;
-  _mirrorPlaying = true;
-  const src = _mirrorQueue.shift();
-  const audio = document.getElementById('kitchen-audio');
-  audio.src = src.length < 300 ? src : 'data:audio/mpeg;base64,' + src;
-  await new Promise(resolve => {
-    audio.addEventListener('ended', resolve, { once: true });
-    audio.play().catch(resolve);
-    setTimeout(resolve, 20000);
-  });
-  _mirrorPlaying = false;
-  playNextMirrorAudio();
-}
-
-function flushMirrorRelay(lines) {
-  if (lines.length > _mirrorRelayPlayed) {
-    for (let i = _mirrorRelayPlayed; i < lines.length; i++) {
-      if (lines[i] && lines[i].audio) queueMirrorAudio(lines[i].audio);
-    }
-    _mirrorRelayPlayed = lines.length;
-  }
-}
-
-function updateKitchenAudioMirror(data) {
-  const lines = data.relayLines || [];
-  const cookingStarted = data.showPhase === 'cooking' || data.showPhase === 'done';
-
-  if (_mirrorGreetingState === 'pending') {
-    if (data.hasGreetingAudio) {
-      _mirrorGreetingState = 'fetching';
-      fetch('/state/voice').then(r => r.json()).then(d => {
-        _mirrorGreetingState = 'resolved';
-        if (d.audio) {
-          queueMirrorAudio(d.audio);
-          queueMirrorAudio('greeting_bell.wav');
-        }
-        if (cookingStarted) flushMirrorRelay(lines);
-      }).catch(() => {
-        _mirrorGreetingState = 'resolved';
-        if (cookingStarted) flushMirrorRelay(lines);
-      });
-      return;
-    }
-    if (Date.now() - _mirrorStartTime < MIRROR_GREETING_TIMEOUT_MS) {
-      return;
-    }
-    _mirrorGreetingState = 'resolved';
-  }
-
-  if (_mirrorGreetingState === 'fetching') return;
-  if (cookingStarted) flushMirrorRelay(lines);
-}
-
 // ── MAIN POLL LOOP ──
 // tracks the order this screen has already shown, so looping back to idle
 // after a receipt doesn't instantly re-trigger on the same leftover
@@ -326,7 +241,6 @@ async function pollForOrder() {
 function startReceiptFlow() {
   setStatus('PROCESSING');
   show('s-loading');
-  resetKitchenAudioMirror();
   pollUntilDone();
 }
 
@@ -334,7 +248,6 @@ function pollUntilDone() {
   clearInterval(_pollTimer);
   _pollTimer = setInterval(() => {
     fetch('/state').then(r => r.json()).then(data => {
-      updateKitchenAudioMirror(data);
       if (data.showPhase === 'done') {
         clearInterval(_pollTimer);
         setTimeout(() => showReceipt(data), 900);
