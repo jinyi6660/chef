@@ -300,6 +300,7 @@ def generate_dish_image_early(answers_text, age_guess):
     for attempt in range(3):
         if _generate_dish_image_once(answers_text, age_guess):
             return
+    print("[image-gen] all 3 attempts failed — giving up, hasImage will stay false", flush=True)
     display_state["image"] = None
 
 
@@ -359,7 +360,11 @@ Reply with ONLY the image prompt text, nothing else — no preamble, no quotatio
 
         display_state["image"] = image_result.data[0].b64_json
         return True
-    except Exception:
+    except Exception as e:
+        # printed (not swallowed silently) so a real failure shows up in
+        # Render's log viewer instead of just quietly retrying 3 times and
+        # leaving the guest with no cake and no way to tell why
+        print(f"[image-gen attempt failed] {type(e).__name__}: {e}", flush=True)
         return False
 
 
@@ -639,7 +644,8 @@ Reply strictly in JSON format, no other text. The JSON must have exactly these f
         dish = json.loads(clean)
         if not dish.get("emotionTags"):
             raise ValueError("empty emotionTags")
-    except Exception:
+    except Exception as e:
+        print(f"[dish-gen fallback triggered] {type(e).__name__}: {e}", flush=True)
         fallback_tags = [w.strip(".,!?()").lower() for w in answers_text.split() if len(w) > 2][:5]
         dish = {
             "emotionTags": fallback_tags or ["memory"],
