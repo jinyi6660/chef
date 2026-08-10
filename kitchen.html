@@ -229,7 +229,7 @@
      the spoken audio is hard to hear in the exhibition space — sits on
      top of the dialogue.png artwork instead of a flat box */
   #relay-caption-wrap {
-    position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%);
+    position: absolute; left: 42%; bottom: 4%; transform: translateX(-50%);
     width: 70%; max-width: 760px;
     aspect-ratio: 3508 / 2480;
     background: url('dialogue.png') center center / contain no-repeat;
@@ -296,6 +296,8 @@
 <audio id="stage4-end-audio"></audio>
 <audio id="stage123-ambient-audio" loop></audio>
 <audio id="reading-ambient-audio" src="reading_page_ambient.wav"></audio>
+<audio id="pageturn-audio" src="pageturn_sound.wav"></audio>
+<audio id="recipe-narration-audio" src="recipe_narration.mp3"></audio>
 
 <div id="bar">
   <span>MYSTERY CHEF</span>
@@ -736,6 +738,15 @@ async function playIdlePageTurn() {
   });
   try { await video.play(); } catch (err) { console.error('page-turn playback failed', err); }
 
+  // page-turn rustle, slowed down and quiet, starts with the video and is
+  // cut off the moment the video itself ends — doesn't need to finish
+  // naturally, just needs to never outlast the picture
+  const pageturnAudio = document.getElementById('pageturn-audio');
+  pageturnAudio.currentTime = 0;
+  pageturnAudio.playbackRate = 0.7;
+  pageturnAudio.volume = 0.25;
+  pageturnAudio.play().catch(() => {});
+
   const safetyMs = (video.duration && isFinite(video.duration))
     ? video.duration * 1000 + 3000
     : 90000;
@@ -747,6 +758,7 @@ async function playIdlePageTurn() {
 
   video.classList.remove('on');
   video.pause();
+  pageturnAudio.pause();
 }
 
 // tracks the order this display has already shown (or is showing), so
@@ -805,6 +817,13 @@ async function runShow(state) {
   readingAmbient.currentTime = 0;
   readingAmbient.play().catch(() => {});
 
+  // the recipe/method text read aloud in the cloned voice, under the
+  // ambience above
+  const recipeNarration = document.getElementById('recipe-narration-audio');
+  recipeNarration.volume = 0.8;
+  recipeNarration.currentTime = 0;
+  recipeNarration.play().catch(() => {});
+
   // 3 — right page handled by the AE overlay video (method-video, looping
   // already); left page grows the guest's own extracted words on the plate
   setPhase('READING');
@@ -834,6 +853,7 @@ async function runShow(state) {
     await new Promise(resolve => mv.addEventListener('ended', resolve, { once: true }));
   }
   readingAmbient.pause();
+  recipeNarration.pause();
   hideStage(); // book fades out for real, not just covered by the opaque video on top of it
   setPhase('COOKING');
   await postPhase('cooking');
