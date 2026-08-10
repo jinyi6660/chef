@@ -370,17 +370,20 @@ function revealStage() {
   mv.playbackRate = 0.5;
   setTimeout(() => {
     mv.play().catch(() => {});
-    // recipe narration starts in the exact same beat as the text-overlay
-    // video, at its own natural pace (speeding it up to match the video's
-    // ~32s length made it sound rushed) — runShow() below now holds the
-    // reading page open until this finishes too, not just the video, so
-    // nothing gets cut off even though the narration outlasts one pass
-    // of the (non-looping) video.
+  }, 1200);
+  // recipe narration starts a beat after the text-overlay video itself
+  // (it was landing before the on-screen text actually appeared) — at
+  // its own natural pace (speeding it up to match the video's ~32s
+  // length made it sound rushed). runShow() below holds the reading page
+  // open until this finishes too, not just the video, so nothing gets
+  // cut off even though the narration outlasts one pass of the
+  // (non-looping) video.
+  setTimeout(() => {
     const narration = document.getElementById('recipe-narration-audio');
     narration.playbackRate = 1;
     narration.currentTime = 0;
     narration.play().catch(() => {});
-  }, 1200);
+  }, 3200);
 }
 
 // ── INGREDIENT TAGS ──────────────────────────────────────────
