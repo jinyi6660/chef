@@ -434,7 +434,8 @@ def call_persona(persona, context):
                     ],
                 )
                 return resp.choices[0].message.content.strip()
-        except Exception:
+        except Exception as e:
+            print(f"[persona relay failed] {persona['name']} attempt {attempt+1}: {type(e).__name__}: {e}", flush=True)
             if attempt == 1:
                 return ""
 
@@ -595,7 +596,11 @@ def build_dish():
     # image generation kicks off right after chef 1's turn (as soon as the
     # age guess exists, for the candle count) rather than waiting for the
     # whole relay, so it still overlaps with chefs 2 and 3.
+    image_kicked_off = False
+
     def kickoff_image(chef1_line):
+        nonlocal image_kicked_off
+        image_kicked_off = True
         age_guess = extract_age_guess(chef1_line)
         threading.Thread(
             target=generate_dish_image_early,
@@ -603,7 +608,26 @@ def build_dish():
             daemon=True
         ).start()
 
-    relay_transcript = run_persona_relay(answers_text, on_first_turn=kickoff_image)
+    # a crash anywhere in the 3-persona relay (not just a single failed
+    # call, which call_persona() already retries/swallows) would otherwise
+    # take the whole order down with an unhandled 500 — kitchen.html's
+    # own "no relayLines yet" warning is only a soft skip, so make sure
+    # this can never throw all the way out and abort everything after it
+    # (dish generation, emotion tags, the image kickoff already threaded).
+    try:
+        relay_transcript = run_persona_relay(answers_text, on_first_turn=kickoff_image)
+    except Exception as e:
+        print(f"[persona relay CRASHED] {type(e).__name__}: {e}", flush=True)
+        relay_transcript = ""
+        if not display_state.get("relayLines"):
+            display_state["relayLines"] = [
+                {"persona": p["name"], "text": "", "audio": None} for p in PERSONAS
+            ]
+
+    # relay crashed before ever reaching chef 1's turn — the image would
+    # otherwise never start generating at all, not even late
+    if not image_kicked_off:
+        kickoff_image("")
 
     # kitchen.html's reading-phase wait loop polls /state until emotionTags
     # is non-empty, with no timeout of its own — if this call throws
