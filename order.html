@@ -322,6 +322,14 @@
 <!-- plays the kitchen display's greeting + relay voices on this iPad too,
      for headphones plugged in here while the guest waits on this screen -->
 <audio id="kitchen-audio"></audio>
+<!-- background layers that play *alongside* the sequential queue above
+     (ambience/narration overlapping chef voices on kitchen.html itself) -->
+<audio id="mirror-pageturn-audio" src="pageturn_sound.wav"></audio>
+<audio id="mirror-reading-ambient-audio" src="reading_page_ambient.wav"></audio>
+<audio id="mirror-recipe-narration-audio" src="recipe_narration.mp3"></audio>
+<audio id="mirror-stage123-ambient-audio" src="stage123_ambient.wav" loop></audio>
+<audio id="mirror-stage4-loop-audio" src="stage4_loop.wav" loop></audio>
+<audio id="mirror-stage4-end-audio" src="stage4_end.wav"></audio>
 
 <div id="statusbar">
   <span>PLEASE ORDER USING THE MENU</span>
@@ -767,15 +775,23 @@ let _mirrorPlaying = false;
 let _mirrorStartTime = 0;
 const MIRROR_GREETING_TIMEOUT_MS = 10000;
 
+let _mirrorPhase = null; // last showPhase we've already reacted to
+let _mirrorStage4Started = false;
+
 function resetKitchenAudioMirror() {
   _mirrorGreetingState = 'pending';
   _mirrorRelayPlayed = 0;
   _mirrorQueue = [];
   _mirrorPlaying = false;
   _mirrorStartTime = Date.now();
+  _mirrorPhase = null;
+  _mirrorStage4Started = false;
   const audio = document.getElementById('kitchen-audio');
   audio.pause();
   audio.src = '';
+  ['mirror-pageturn-audio', 'mirror-reading-ambient-audio', 'mirror-recipe-narration-audio',
+   'mirror-stage123-ambient-audio', 'mirror-stage4-loop-audio', 'mirror-stage4-end-audio']
+    .forEach(id => { const a = document.getElementById(id); a.pause(); a.currentTime = 0; });
 }
 
 function queueMirrorAudio(src) {
@@ -809,6 +825,54 @@ function flushMirrorRelay(lines) {
   }
 }
 
+// background layers that play in parallel with the sequential voice
+// queue above, mirroring kitchen.html's own ambience/narration tracks —
+// driven off showPhase transitions since this screen has no video of its
+// own to hang exact timing off of.
+function handleMirrorPhaseTransition(data) {
+  if (data.showPhase === _mirrorPhase) return;
+  const prevPhase = _mirrorPhase;
+  _mirrorPhase = data.showPhase;
+
+  const pageturn = document.getElementById('mirror-pageturn-audio');
+  const readingAmbient = document.getElementById('mirror-reading-ambient-audio');
+  const recipeNarration = document.getElementById('mirror-recipe-narration-audio');
+
+  if (data.showPhase === 'pageturn') {
+    pageturn.playbackRate = 0.7;
+    pageturn.volume = 0.25;
+    pageturn.currentTime = 0;
+    pageturn.play().catch(() => {});
+  } else if (prevPhase === 'pageturn') {
+    pageturn.pause();
+  }
+
+  if (data.showPhase === 'reading') {
+    readingAmbient.volume = 0.12;
+    readingAmbient.currentTime = 0;
+    readingAmbient.play().catch(() => {});
+    recipeNarration.volume = 0.8;
+    recipeNarration.playbackRate = 1;
+    recipeNarration.currentTime = 0;
+    recipeNarration.play().catch(() => {});
+  } else if (prevPhase === 'reading') {
+    readingAmbient.pause();
+    recipeNarration.pause();
+  }
+
+  if (data.showPhase === 'cooking') {
+    const stage123 = document.getElementById('mirror-stage123-ambient-audio');
+    stage123.volume = 0.15;
+    stage123.currentTime = 0;
+    stage123.play().catch(() => {});
+  }
+
+  if (data.showPhase === 'done' || (prevPhase === 'cooking' && data.showPhase !== 'cooking')) {
+    document.getElementById('mirror-stage123-ambient-audio').pause();
+    document.getElementById('mirror-stage4-loop-audio').pause();
+  }
+}
+
 function updateKitchenAudioMirror(data) {
   const lines = data.relayLines || [];
   // relayLines is usually already full long before kitchen.html actually
@@ -817,6 +881,31 @@ function updateKitchenAudioMirror(data) {
   // kitchen.html has posted the same 'cooking' phase transition it uses
   // right before it starts its own per-chef video+audio sequence.
   const cookingStarted = data.showPhase === 'cooking' || data.showPhase === 'done';
+
+  handleMirrorPhaseTransition(data);
+
+  // once all 3 chefs have been queued, kitchen.html moves on from the
+  // stage1-3 ambience into the stage4 "generating image" loop/end sounds
+  if (cookingStarted && _mirrorRelayPlayed >= 3) {
+    const stage123 = document.getElementById('mirror-stage123-ambient-audio');
+    const stage4Loop = document.getElementById('mirror-stage4-loop-audio');
+    const stage4End = document.getElementById('mirror-stage4-end-audio');
+    if (data.hasImage) {
+      if (!stage4Loop.paused) stage4Loop.pause();
+      if (!stage123.paused) stage123.pause();
+      if (_mirrorStage4Started && stage4End.paused && stage4End.currentTime === 0) {
+        stage4End.volume = 0.5;
+        stage4End.play().catch(() => {});
+      }
+      _mirrorStage4Started = false;
+    } else if (!_mirrorStage4Started) {
+      _mirrorStage4Started = true;
+      stage123.pause();
+      stage4Loop.volume = 0.3;
+      stage4Loop.currentTime = 0;
+      stage4Loop.play().catch(() => {});
+    }
+  }
 
   if (_mirrorGreetingState === 'pending') {
     if (data.hasGreetingAudio) {
