@@ -225,6 +225,19 @@
   }
   #dish-reveal.on { opacity: 1; }
 
+  /* captions the three chefs' relay commentary during stage1-3, in case
+     the spoken audio is hard to hear in the exhibition space */
+  #relay-caption {
+    position: absolute; left: 50%; bottom: 6%; transform: translateX(-50%);
+    width: 84%; max-width: 900px;
+    z-index: 820; text-align: center;
+    font-family: 'Courier Prime', monospace;
+    font-size: 22px; line-height: 1.5; color: #fff;
+    background: rgba(0,0,0,0.6); padding: 16px 26px; border-radius: 4px;
+    opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
+  }
+  #relay-caption.on { opacity: 1; }
+
   /* ── STATUS BAR ── */
   #bar {
     position: fixed; bottom: 0; left: 0; right: 0; height: 22px;
@@ -247,6 +260,7 @@
   <img id="idle-cover" alt="">
   <div id="idle-dim"></div>
   <img id="dish-reveal" alt="">
+  <div id="relay-caption"></div>
 
   <div id="book">
     <div id="dim-overlay"></div>
@@ -315,6 +329,7 @@ setInterval(() => {
 function resetDisplay() {
   document.getElementById('plate-mask').innerHTML = '';
   document.getElementById('dish-reveal').classList.remove('on');
+  document.getElementById('relay-caption').classList.remove('on');
 }
 
 // ── IDLE ──────────────────────────────────────────────────────
@@ -430,9 +445,10 @@ const STAGE_VIDEOS    = ['stage1.mp4', 'stage22.mp4', 'stage33.mp4'];
 const STAGE_DURATIONS = [7.375, 14.375, 10.375]; // each file's own natural length, seconds
 const LOADING_VIDEO   = 'stage44.mp4';
 
-async function playSyncedStage(videoSrc, naturalDuration, audioBase64) {
+async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText) {
   const video = document.getElementById('show-video');
   const audio = document.getElementById('relay-audio');
+  const caption = document.getElementById('relay-caption');
 
   video.src = videoSrc;
   video.loop = false;
@@ -440,11 +456,19 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64) {
   video.classList.add('on');
   video.load();
 
+  if (lineText) {
+    caption.textContent = lineText;
+    caption.classList.add('on');
+  } else {
+    caption.classList.remove('on');
+  }
+
   if (!audioBase64) {
     try { await video.play(); } catch {}
     await sleep(naturalDuration * 1000);
     video.classList.remove('on');
     video.pause();
+    caption.classList.remove('on');
     return;
   }
 
@@ -469,6 +493,7 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64) {
   video.classList.remove('on');
   video.pause();
   video.playbackRate = 1;
+  caption.classList.remove('on');
 }
 
 async function playLoadingStage(videoSrc, isDone) {
@@ -549,7 +574,7 @@ async function playCookingStages() {
 
   for (let i = 0; i < STAGE_VIDEOS.length; i++) {
     const line = lines[i];
-    await playSyncedStage(STAGE_VIDEOS[i], STAGE_DURATIONS[i], line && line.audio);
+    await playSyncedStage(STAGE_VIDEOS[i], STAGE_DURATIONS[i], line && line.audio, line && line.text);
   }
 
   ambient.pause();
