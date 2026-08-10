@@ -778,6 +778,7 @@ def get_local_ip():
 # doesn't wait on the first-ever ElevenLabs call for each line.
 NARRATION_LINES = [
     "Hello, welcome to this restaurant.",
+    "I'll be your server today, jinyi.",
     "Please read our agreement carefully.",
     "Today, our special menu is birthday cake — baked for you by three chefs, together.",
     "Do you usually eat cake on your birthday?",

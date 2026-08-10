@@ -687,6 +687,8 @@ function startVN() {
   primeMirrorAudioElements();
   speechSynthesis && speechSynthesis.cancel();
   speak('Hello, welcome to this restaurant.').then(() => {
+    return speak("I'll be your server today, jinyi.");
+  }).then(() => {
     speak('Please read our agreement carefully.');
   });
   vnStep = 0; vnAnswers = {};
