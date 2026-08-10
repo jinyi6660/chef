@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>MYSTERY CHEF — RECEIPT</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=VT323&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="bg_order.png">
+<link rel="preload" as="image" href="cake.jpg">
+<style>
+  :root {
+    --g:   #6b9fff;
+    --gd:  #1d3fa8;
+    --bg:  #00010f;
+    --mono: 'Space Mono', monospace;
+    --vt:  'VT323', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #000; margin: 0; padding: 0; }
+  body { color: var(--g); font-family: var(--mono); }
+
+  #app {
+    position: fixed; top: 0; bottom: 0;
+    left: 50%; transform: translateX(-50%);
+    width: 100%; max-width: 520px;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  #app::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 9999;
+    background: repeating-linear-gradient(0deg,rgba(0,0,0,0.15) 0px,rgba(0,0,0,0.15) 1px,transparent 1px,transparent 3px);
+  }
+  @keyframes flicker { 0%,97%,100%{opacity:1} 98%{opacity:.93} }
+  @keyframes blink   { 0%,100%{opacity:1} 50%{opacity:0} }
+  @keyframes fadeIn  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+  #app { animation: flicker 5s infinite; }
+
+  #statusbar {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 26px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    background: rgba(107,159,255,0.04);
+    border-top: 1px solid rgba(107,159,255,0.1);
+    font-size: 9px; letter-spacing: 0.22em; color: var(--gd);
+    text-transform: uppercase; z-index: 1000;
+  }
+
+  .screen { display: none; position: absolute; inset: 0; z-index: 10; }
+  .screen.on { display: flex; animation: screenIn 0.45s cubic-bezier(.22,.61,.36,1) both; }
+  .screen.out { display: flex; animation: screenOut 0.45s cubic-bezier(.5,0,.75,.39) both; pointer-events: none; }
+  @keyframes screenIn  { from{opacity:0; transform:scale(0.99)} to{opacity:1; transform:none} }
+  @keyframes screenOut { from{opacity:1} to{opacity:0} }
+
+  /* ── IDLE ── */
+  #s-idle {
+    background: url('bg_order.png') center center / cover no-repeat;
+    align-items: center; justify-content: center; flex-direction: column;
+  }
+  #s-idle::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: rgba(0,1,15,0.45);
+  }
+  .idle-title {
+    font-family: 'Algerian', 'Cinzel Decorative', serif;
+    font-size: 22px; font-weight: 900; letter-spacing: 0.1em;
+    color: #1200ff; text-align: center; position: relative; z-index: 1;
+    text-shadow: 0 0 6px rgba(255,255,255,0.6), 0 0 12px rgba(255,255,255,0.3);
+  }
+  .idle-sub {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.28em;
+    color: rgba(255,255,255,.5); text-transform: uppercase;
+    margin-top: 14px; position: relative; z-index: 1;
+  }
+
+  /* ── LOADING ── */
+  #s-loading {
+    flex-direction: column; justify-content: flex-start; align-items: flex-start;
+    padding: 80px 72px;
+    background: #000 url('cake.jpg') center center / cover no-repeat;
+  }
+  #s-loading::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)),
+                linear-gradient(rgba(107,159,255,0.02) 1px,transparent 1px),
+                linear-gradient(90deg,rgba(107,159,255,0.02) 1px,transparent 1px);
+    background-size: cover, 48px 48px, 48px 48px;
+  }
+  .ld-title {
+    font-family: var(--vt); font-size: 40px; color: #fff;
+    text-shadow: 0 0 10px rgba(255,255,255,0.75), 0 0 20px rgba(255,255,255,0.4);
+    margin-bottom: 28px; position: relative; z-index: 1;
+  }
+  .ld-cursor {
+    display: inline-block; width: 7px; height: .85em;
+    background: var(--g); animation: blink .75s step-end infinite;
+    vertical-align: middle; margin-left: 6px; box-shadow: 0 0 6px var(--g);
+  }
+
+  /* ── RECEIPT ── */
+  #s-receipt {
+    background: #000 url('cake.jpg') center center / cover no-repeat;
+    flex-direction: column;
+    justify-content: flex-start; align-items: center;
+    padding: 24px 40px 20px;
+    overflow: hidden;
+  }
+  #s-receipt::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)),
+                linear-gradient(rgba(107,159,255,0.02) 1px,transparent 1px),
+                linear-gradient(90deg,rgba(107,159,255,0.02) 1px,transparent 1px);
+    background-size: cover, 48px 48px, 48px 48px;
+  }
+  .rc-scroll {
+    width: 100%; flex: 1; min-height: 0; overflow-y: auto;
+    display: flex; flex-direction: column; align-items: center;
+    position: relative; z-index: 1;
+  }
+  .rc-ticket {
+    width: 100%; max-width: 360px;
+    display: flex; flex-direction: column; align-items: center;
+    position: relative; z-index: 1;
+    border: 1px solid rgba(107,159,255,0.2); padding: 40px 32px 36px;
+    background: rgba(255,255,255,0.8); box-shadow: 0 0 24px rgba(255,255,255,.35);
+    animation: fadeIn .8s ease forwards;
+  }
+  .rc-shop { font-family: var(--vt); font-size: 36px; color: var(--g); text-shadow: 0 0 8px var(--g); text-align: center; margin-bottom: 28px; letter-spacing: .08em; }
+  .rc-photo-wrap {
+    width: 100%; aspect-ratio: 1;
+    border: 1px solid rgba(107,159,255,.15); overflow: hidden;
+    display: flex; align-items: center; justify-content: center; background: rgba(0,1,15,.5);
+  }
+  .rc-photo-wrap img { width:100%; height:100%; object-fit:cover; display:none; filter: brightness(.85) saturate(.7); }
+  .rc-photo-ph { font-family: var(--mono); font-size: 9px; letter-spacing: .25em; color: var(--gd); text-transform: uppercase; animation: blink 1.4s ease-in-out infinite; }
+  .rc-dash { width:100%; border-top:1px dashed rgba(107,159,255,.2); margin: 28px 0 24px; }
+  .rc-hdr, .rc-row { display:flex; align-items:flex-start; gap:14px; }
+  .rc-hdr { font-size:8px; letter-spacing:.28em; color:var(--gd); text-transform:uppercase; margin-bottom:16px; }
+  .rc-row { margin-bottom:18px; }
+  .rc-hdr>span:nth-child(1), .rc-row .cq { width:26px; flex-shrink:0; font-size:10px; color:var(--gd); }
+  .rc-hdr>span:nth-child(2), .rc-row .ci { flex:1; }
+  .rc-row .ci { display:flex; flex-direction:column; gap:4px; }
+  .rc-row .ci .im { font-family:var(--vt); font-size:22px; color:var(--g); line-height:1.3; }
+  .rc-row .ci .it { font-size:8px; letter-spacing:.22em; color:var(--gd); text-transform:uppercase; }
+  .rc-hdr>span:nth-child(3), .rc-row .ca { width:26px; flex-shrink:0; text-align:right; font-size:10px; color:var(--gd); }
+  .rc-tax { display:flex; justify-content:space-between; font-size:9px; letter-spacing:.22em; color:var(--gd); text-transform:uppercase; margin:8px 0 22px; }
+  .rc-dot { width:100%; border-top:1px dotted rgba(107,159,255,.15); margin-bottom:18px; }
+  .rc-actions { display:flex; flex-direction:column; align-items:center; gap:10px; flex-shrink:0; padding-top:16px; position:relative; z-index:1; }
+  .rc-btn { font-family:var(--mono); font-size:10px; letter-spacing:.22em; text-transform:uppercase; padding:11px 40px; cursor:pointer; transition:all .3s; background:rgba(255,255,255,0.15); border:1px solid rgba(107,159,255,.25); color:var(--g); }
+  .rc-btn:hover { background:rgba(255,255,255,0.28); border-color:var(--g); }
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- plays the kitchen display's greeting + relay voices on this phone too,
+     for headphones plugged in here while the guest waits for their receipt -->
+<audio id="kitchen-audio"></audio>
+
+<div id="statusbar">
+  <span>MYSTERY CHEF v3.0 — RECEIPT</span>
+  <span id="st-label">STANDBY</span>
+  <span id="st-clock">--:--:--</span>
+</div>
+
+<!-- ── IDLE ── -->
+<div class="screen on" id="s-idle">
+  <div class="idle-title">MYSTERY CHEF</div>
+  <div class="idle-sub">waiting for an order</div>
+</div>
+
+<!-- ── LOADING ── -->
+<div class="screen" id="s-loading">
+  <h2 class="ld-title">Processing<span class="ld-cursor"></span></h2>
+</div>
+
+<!-- ── RECEIPT ── -->
+<div class="screen" id="s-receipt">
+  <div class="rc-scroll">
+    <div class="rc-ticket">
+      <h2 class="rc-shop">MYSTERY CHEF</h2>
+      <div class="rc-photo-wrap">
+        <img id="rc-photo" src="" alt="">
+        <p class="rc-photo-ph">rendering moment</p>
+      </div>
+      <div class="rc-dash"></div>
+      <div class="rc-items">
+        <div class="rc-hdr"><span>QTY</span><span>ITEM</span><span>AMT</span></div>
+        <div id="rc-list"></div>
+      </div>
+      <div class="rc-tax"><span>****</span><span>TOTAL</span><span id="rc-total">—</span></div>
+      <div class="rc-dot"></div>
+    </div>
+  </div>
+  <div class="rc-actions">
+    <button class="rc-btn" onclick="finishOrder()">Finish</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+<script>
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ── CLOCK ──
+setInterval(() => {
+  document.getElementById('st-clock').textContent = new Date().toTimeString().slice(0,8);
+}, 1000);
+function setStatus(s) { document.getElementById('st-label').textContent = s; }
+
+function show(id) {
+  const next = document.getElementById(id);
+  if (!next) return;
+  document.querySelectorAll('.screen.on').forEach(s => {
+    s.classList.add('out');
+    s.classList.remove('on');
+    setTimeout(() => s.classList.remove('out'), 450);
+  });
+  void next.offsetWidth;
+  next.classList.add('on');
+}
+
+// ── KITCHEN AUDIO MIRROR ──
+// mini PC inside the oven prop has no headphone access, so this phone
+// (which does) plays the same greeting + relay voices in parallel, driven
+// by the same /state polling already used to wait for the receipt.
+let _mirrorGreetingState = 'pending'; // 'pending' | 'fetching' | 'resolved'
+let _mirrorRelayPlayed = 0;
+let _mirrorQueue = [];
+let _mirrorPlaying = false;
+let _mirrorStartTime = 0;
+const MIRROR_GREETING_TIMEOUT_MS = 10000;
+
+function resetKitchenAudioMirror() {
+  _mirrorGreetingState = 'pending';
+  _mirrorRelayPlayed = 0;
+  _mirrorQueue = [];
+  _mirrorPlaying = false;
+  _mirrorStartTime = Date.now();
+  const audio = document.getElementById('kitchen-audio');
+  audio.pause();
+  audio.src = '';
+}
+
+function queueMirrorAudio(src) {
+  _mirrorQueue.push(src);
+  playNextMirrorAudio();
+}
+
+async function playNextMirrorAudio() {
+  if (_mirrorPlaying || !_mirrorQueue.length) return;
+  _mirrorPlaying = true;
+  const src = _mirrorQueue.shift();
+  const audio = document.getElementById('kitchen-audio');
+  audio.src = src.length < 300 ? src : 'data:audio/mpeg;base64,' + src;
+  await new Promise(resolve => {
+    audio.addEventListener('ended', resolve, { once: true });
+    audio.play().catch(resolve);
+    setTimeout(resolve, 20000);
+  });
+  _mirrorPlaying = false;
+  playNextMirrorAudio();
+}
+
+function flushMirrorRelay(lines) {
+  if (lines.length > _mirrorRelayPlayed) {
+    for (let i = _mirrorRelayPlayed; i < lines.length; i++) {
+      if (lines[i] && lines[i].audio) queueMirrorAudio(lines[i].audio);
+    }
+    _mirrorRelayPlayed = lines.length;
+  }
+}
+
+function updateKitchenAudioMirror(data) {
+  const lines = data.relayLines || [];
+  const cookingStarted = data.showPhase === 'cooking' || data.showPhase === 'done';
+
+  if (_mirrorGreetingState === 'pending') {
+    if (data.hasGreetingAudio) {
+      _mirrorGreetingState = 'fetching';
+      fetch('/state/voice').then(r => r.json()).then(d => {
+        _mirrorGreetingState = 'resolved';
+        if (d.audio) {
+          queueMirrorAudio(d.audio);
+          queueMirrorAudio('greeting_bell.wav');
+        }
+        if (cookingStarted) flushMirrorRelay(lines);
+      }).catch(() => {
+        _mirrorGreetingState = 'resolved';
+        if (cookingStarted) flushMirrorRelay(lines);
+      });
+      return;
+    }
+    if (Date.now() - _mirrorStartTime < MIRROR_GREETING_TIMEOUT_MS) {
+      return;
+    }
+    _mirrorGreetingState = 'resolved';
+  }
+
+  if (_mirrorGreetingState === 'fetching') return;
+  if (cookingStarted) flushMirrorRelay(lines);
+}
+
+// ── MAIN POLL LOOP ──
+// tracks the order this screen has already shown, so looping back to idle
+// after a receipt doesn't instantly re-trigger on the same leftover
+// "done" state — only a genuinely NEW order (a different ts) starts again
+let lastSeenTs = null;
+let _pollTimer = null;
+
+async function pollForOrder() {
+  show('s-idle');
+  setStatus('STANDBY');
+  while (true) {
+    let data;
+    try { data = await fetch('/state').then(r => r.json()); } catch { data = null; }
+    if (data && data.ts && data.ts !== lastSeenTs && (data.status === 'cooking' || data.status === 'done')) {
+      lastSeenTs = data.ts;
+      startReceiptFlow();
+      return;
+    }
+    await sleep(1200);
+  }
+}
+
+function startReceiptFlow() {
+  setStatus('PROCESSING');
+  show('s-loading');
+  resetKitchenAudioMirror();
+  pollUntilDone();
+}
+
+function pollUntilDone() {
+  clearInterval(_pollTimer);
+  _pollTimer = setInterval(() => {
+    fetch('/state').then(r => r.json()).then(data => {
+      updateKitchenAudioMirror(data);
+      if (data.showPhase === 'done') {
+        clearInterval(_pollTimer);
+        setTimeout(() => showReceipt(data), 900);
+      }
+    }).catch(() => {});
+  }, 2000);
+}
+
+// ── RECEIPT ──
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function showReceipt(state) {
+  const a = state.answers || {};
+  const rows = [
+    [a.birthday_cake_habit, '// whether you eat cake on your birthday'],
+    [a.memorable_flavour,   '// the flavour that stayed in your memory'],
+    [a.appearance,          '// what it looked like'],
+    [a.place_and_company,   '// where, when, and who you were with'],
+  ].filter(([v]) => v);
+
+  document.getElementById('rc-list').innerHTML = rows.map(([v,t]) =>
+    `<div class="rc-row">
+      <span class="cq">01</span>
+      <span class="ci"><span class="im">${esc(v)}</span><span class="it">${esc(t)}</span></span>
+      <span class="ca">1</span>
+    </div>`
+  ).join('');
+
+  setStatus('DONE');
+  show('s-receipt');
+
+  fetch('/state/image').then(r => r.json()).then(d => {
+    if (d.image) {
+      const img = document.getElementById('rc-photo');
+      img.src = 'data:image/png;base64,' + d.image;
+      img.style.display = 'block';
+      document.querySelector('.rc-photo-ph').style.display = 'none';
+    }
+  }).catch(() => {});
+}
+
+function finishOrder() {
+  document.getElementById('rc-list').innerHTML = '';
+  document.getElementById('rc-total').textContent = '—';
+  const img = document.getElementById('rc-photo');
+  img.style.display = 'none'; img.src = '';
+  document.querySelector('.rc-photo-ph').style.display = '';
+
+  // unblocks server_pi.py's busy-guard so the order screen can accept the
+  // next guest's submission — this is the ONLY thing that resets it now
+  fetch('/reset', { method: 'POST' }).catch(() => {});
+
+  pollForOrder();
+}
+
+pollForOrder();
+</script>
+</body>
+</html>

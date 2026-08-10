@@ -537,9 +537,17 @@ def build_dish():
     # stuck mid-phase forever and lock out all future orders — the 10min
     # safety window (well past the ~5min the real performance ever takes)
     # avoids that permanent lockout.
+    #
+    # order.html and receipt.html now run on two separate devices — once a
+    # show reaches "done", receipt.html still needs to read this same
+    # display_state to build the guest's receipt, so a stray showPhase ==
+    # "done" no longer counts as free the way it used to when one device
+    # did both jobs. Only an explicit /reset (receipt.html's Finish
+    # button) clears busy now, so a new order can never overwrite a
+    # receipt still being shown.
     BUSY_TIMEOUT_SEC = 600
     still_busy = (
-        display_state.get("showPhase") not in ("idle", "done")
+        display_state.get("showPhase") != "idle"
         and (time.time() - display_state.get("ts", 0)) < BUSY_TIMEOUT_SEC
     )
     if still_busy:

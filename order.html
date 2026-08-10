@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>MYSTERY CHEF — ORDER</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=VT323&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="DIALOGUE.jpg">
+<link rel="preload" as="image" href="bg_order.png">
+<link rel="preload" as="image" href="DIA.png">
+<link rel="preload" as="image" href="second.png">
+<style>
+  :root {
+    --g:   #6b9fff;
+    --gd:  #1d3fa8;
+    --bg:  #00010f;
+    --mono: 'Space Mono', monospace;
+    --vt:  'VT323', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #000; margin: 0; padding: 0; }
+  body { color: var(--g); font-family: var(--mono); }
+
+  #app {
+    position: fixed; top: 0; bottom: 0;
+    left: 50%; transform: translateX(-50%);
+    width: 100%; max-width: 520px;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  #app::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 9999;
+    background: repeating-linear-gradient(0deg,rgba(0,0,0,0.15) 0px,rgba(0,0,0,0.15) 1px,transparent 1px,transparent 3px);
+  }
+  @keyframes flicker { 0%,97%,100%{opacity:1} 98%{opacity:.93} }
+  @keyframes blink   { 0%,100%{opacity:1} 50%{opacity:0} }
+  #app { animation: flicker 5s infinite; }
+
+  #statusbar {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 26px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    background: rgba(107,159,255,0.04);
+    border-top: 1px solid rgba(107,159,255,0.1);
+    font-size: 9px; letter-spacing: 0.22em; color: var(--gd);
+    text-transform: uppercase; z-index: 1000;
+  }
+
+  /* ── SCREENS ── */
+  .screen { display: none; position: absolute; inset: 0; z-index: 10; }
+  .screen.on { display: flex; animation: screenIn 0.45s cubic-bezier(.22,.61,.36,1) both; }
+  .screen.out { display: flex; animation: screenOut 0.45s cubic-bezier(.5,0,.75,.39) both; pointer-events: none; }
+  @keyframes screenIn  { from{opacity:0; transform:scale(0.99)} to{opacity:1; transform:none} }
+  @keyframes screenOut { from{opacity:1} to{opacity:0} }
+
+  /* ── WELCOME ── */
+  #s-welcome {
+    background: url('bg_order.png') center center / cover no-repeat;
+  }
+  .wt-panels {
+    flex: 1; display: flex;
+  }
+  .wt-left {
+    flex: 1; display: flex; align-items: flex-start;
+    padding: 58% 12px 0 20px;
+  }
+  .wt-right {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 10% 16px 0;
+  }
+  .wt-btn {
+    font-family: 'Algerian', 'Cinzel Decorative', serif;
+    font-size: min(3.2vw, 13px);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #1200ff; background: none; border: none;
+    padding: 4px 0;
+    cursor: pointer; text-align: left;
+    display: inline-flex; flex-direction: column; align-items: stretch;
+    width: fit-content;
+    transition: opacity 0.2s;
+    text-shadow: 0 0 6px rgba(255,255,255,0.6), 0 0 12px rgba(255,255,255,0.3);
+  }
+  .wt-btn:hover, .wt-btn:active { opacity: 0.75; }
+  .wt-btn-label { white-space: nowrap; display: block; }
+  .wt-btn-arrow {
+    display: block; position: relative;
+    height: 1.5px; background: #1200ff;
+    margin-top: 8px;
+  }
+  .wt-btn-arrow::after {
+    content: '→';
+    position: absolute; right: -1em; top: 50%;
+    transform: translateY(-50%);
+    color: #1200ff;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.85em; line-height: 1;
+  }
+
+  /* ── CONSENT ── */
+  #s-consent {
+    background: url('second.png') center center / cover no-repeat;
+  }
+  .napkin-title {
+    position: absolute; z-index: 2;
+    top: 25.5%; left: 50%; transform: translateX(-50%);
+    font-family: 'Cinzel Decorative', serif;
+    font-size: clamp(12px, 3.2vw, 16px); letter-spacing: 0.14em;
+    font-weight: 900;
+    color: #1a1a1a; text-align: center; line-height: 1.5;
+    white-space: nowrap;
+  }
+  .napkin-rule {
+    position: absolute; z-index: 2;
+    top: 34%; left: 18%; right: 18%; height: 1px;
+    background: linear-gradient(to right, transparent, rgba(0,0,0,0.22) 25%, rgba(0,0,0,0.22) 75%, transparent);
+  }
+  .cs-text {
+    position: absolute; z-index: 2;
+    top: 37%; left: 60%; transform: translateX(-50%);
+    width: 78%;
+    font-size: 15px; line-height: 1.65; letter-spacing: 0.02em;
+    font-weight: 900;
+    color: #2c2c2c; white-space: pre-line; text-align: left;
+  }
+  .cs-accept {
+    position: absolute; z-index: 2;
+    bottom: 19%; right: 16%;
+    font-family: 'Algerian', 'Cinzel Decorative', serif;
+    font-size: min(3vw, 12px); letter-spacing: 0.1em;
+    color: #1200ff;
+    background: rgba(18,0,255,0.08); border: 1px solid rgba(18,0,255,0.25);
+    padding: 6px 16px;
+    cursor: pointer; transition: opacity 0.2s;
+  }
+  .cs-accept:hover { opacity: 0.7; }
+  .cs-decline {
+    position: absolute; z-index: 2;
+    bottom: 19%; left: 24%;
+    font-family: 'Algerian', 'Cinzel Decorative', serif;
+    font-size: min(2.6vw, 9px); letter-spacing: 0.1em;
+    color: #1200ff; background: none; border: none;
+    cursor: pointer; transition: opacity 0.2s;
+  }
+  .cs-decline:hover { opacity: 0.7; }
+
+  /* ── VN SCENE ── */
+  #s-vn {
+    flex-direction: column; justify-content: flex-end; z-index: 11;
+    background: url('DIALOGUE.jpg') center center / cover no-repeat;
+  }
+  #s-vn::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: rgba(0,1,15,0.35);
+  }
+
+  #vn-progress {
+    position: absolute; top: 0; left: 0; height: 2px;
+    background: var(--g); box-shadow: 0 0 8px var(--g);
+    transition: width 0.6s ease; z-index: 30; opacity: 0.6;
+  }
+  #vn-step-counter {
+    position: absolute; top: 16px; right: 24px;
+    font-size: 8px; letter-spacing: 0.3em; color: rgba(107,159,255,0.45);
+    text-transform: uppercase; z-index: 30; display: none;
+  }
+  #vn-back {
+    position: absolute; z-index: 30; top: 18px; left: 20px;
+    background: none; border: none;
+    font-family: 'Algerian', 'Cinzel Decorative', serif;
+    font-size: 11px; letter-spacing: 0.12em;
+    color: rgba(255,255,255,0.55); cursor: pointer; transition: color 0.2s;
+  }
+  #vn-back:hover { color: rgba(255,255,255,0.9); }
+
+  #vn-box {
+    position: relative; z-index: 20;
+    width: 100%; padding: 0 0 70px;
+  }
+  #vn-dialog {
+    position: relative;
+    border: none; outline: none; box-shadow: none;
+  }
+  #vn-dia-bg {
+    display: block; width: 100%; height: auto;
+    position: relative; z-index: 0;
+  }
+  #vn-content {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 1;
+    padding: 92px 38px 20px 54px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  #vn-text {
+    font-size: 13px; line-height: 1.75; color: rgba(255,255,255,0.92);
+    letter-spacing: 0.04em; white-space: pre-line;
+  }
+  #vn-caret {
+    display: none;
+    text-align: right; width: 100%;
+    padding-right: 14%;
+    margin-top: 18px;
+    font-size: 14px; color: rgba(255,255,255,0.85);
+    text-shadow: 0 0 8px rgba(255,255,255,0.6), 0 0 18px rgba(255,255,255,0.25);
+  }
+  #vn-opts {
+    display: none; gap: 10px; flex-wrap: wrap; padding: 10px 0 0;
+    pointer-events: auto;
+  }
+  #vn-opts.on { display: flex; }
+  .opt-btn {
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.24em;
+    text-transform: uppercase; color: #fff;
+    background: rgba(80,130,255,0.15); border: 1px solid rgba(107,159,255,0.42);
+    padding: 11px 24px; cursor: pointer; transition: all .22s;
+  }
+  .opt-btn:hover, .opt-btn:active {
+    background: rgba(80,130,255,0.45); border-color: #fff;
+    box-shadow: 0 0 14px rgba(107,159,255,0.28);
+  }
+  .opt-btn.primary {
+    background: rgba(80,130,255,0.32); border-color: rgba(107,159,255,0.7);
+    flex: 1;
+  }
+
+  #vn-input-area {
+    display: none;
+    position: absolute; z-index: 50;
+    left: 0; right: 0; bottom: 28px;
+    padding: 0 16px 14px;
+  }
+  #vn-input-area.on { display: block; animation: screenIn 0.2s ease both; }
+  #vn-row {
+    display: flex; align-items: center;
+    background: rgba(8,8,14,0.65);
+    border: 1.5px solid rgba(255,255,255,0.62);
+    border-radius: 10px;
+    padding: 0 6px 0 0;
+    overflow: hidden;
+  }
+  #vn-input {
+    flex: 1; background: transparent; border: none;
+    color: #fff; font-family: var(--mono); font-size: 14px;
+    padding: 14px 16px; outline: none; caret-color: #fff;
+  }
+  #vn-input::placeholder {
+    color: rgba(255,255,255,0.32);
+    letter-spacing: 0.18em; font-size: 11px;
+  }
+  .vn-icon-btn {
+    background: none; border: none;
+    padding: 8px; margin: 2px;
+    cursor: pointer; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: background 0.2s; color: #fff;
+  }
+  .vn-icon-btn:hover { background: rgba(255,255,255,0.1); }
+  #vn-mic.rec { background: rgba(220,60,60,0.3); animation: blink .55s step-end infinite; }
+  #vn-mic.transcribing { background: rgba(107,159,255,0.3); animation: blink .8s step-end infinite; }
+
+  /* ── LOADING ── */
+  #s-loading {
+    flex-direction: column; justify-content: flex-start; align-items: flex-start;
+    padding: 80px 72px;
+    background: #000 url('cake.jpg') center center / cover no-repeat;
+  }
+  #s-loading::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)),
+                linear-gradient(rgba(107,159,255,0.02) 1px,transparent 1px),
+                linear-gradient(90deg,rgba(107,159,255,0.02) 1px,transparent 1px);
+    background-size: cover, 48px 48px, 48px 48px;
+  }
+  .ld-title {
+    font-family: var(--vt); font-size: 40px; color: #fff;
+    text-shadow: 0 0 10px rgba(255,255,255,0.75), 0 0 20px rgba(255,255,255,0.4);
+    margin-bottom: 28px; position: relative; z-index: 1;
+  }
+  .ld-cursor {
+    display: inline-block; width: 7px; height: .85em;
+    background: var(--g); animation: blink .75s step-end infinite;
+    vertical-align: middle; margin-left: 6px; box-shadow: 0 0 6px var(--g);
+  }
+  .ld-note {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em;
+    color: rgba(255,255,255,.55); text-transform: uppercase;
+    position: relative; z-index: 1; max-width: 280px; line-height: 1.8;
+  }
+
+  .cursor { display:inline-block; width:2px; height:.9em; background:var(--g); margin-left:3px; vertical-align:middle; animation:blink .8s step-end infinite; }
+
+  @media (max-width: 400px) {
+    #vn-box { padding: 0 14px 32px; }
+    #vn-text { font-size: 13px; }
+    #vn-input { font-size: 20px; }
+    #s-loading { padding: 50px 28px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+<div id="statusbar">
+  <span>MYSTERY CHEF v3.0 — ORDER</span>
+  <span id="st-label">STANDBY</span>
+  <span id="st-clock">--:--:--</span>
+</div>
+
+<!-- ── WELCOME ── -->
+<div class="screen on" id="s-welcome">
+  <div class="wt-panels">
+    <div class="wt-left"></div>
+    <div class="wt-right">
+      <button class="wt-btn" onclick="startVN()">
+        <span class="wt-btn-label">READY TO ORDER</span>
+        <span class="wt-btn-arrow"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONSENT ── -->
+<div class="screen" id="s-consent">
+  <div class="napkin-title" id="napkin-title">DINING<br>AGREEMENT</div>
+  <div class="napkin-rule"></div>
+  <p class="cs-text" id="cs-text"></p>
+  <button class="cs-accept" onclick="acceptConsent()">I ACCEPT</button>
+  <button class="cs-decline" onclick="declineConsent()">decline</button>
+</div>
+
+<!-- ── VN SCENE ── -->
+<div class="screen" id="s-vn">
+  <div id="vn-progress"></div>
+  <div id="vn-step-counter"></div>
+  <button id="vn-back" onclick="show('s-welcome'); setStatus('STANDBY');">← BACK</button>
+
+  <div id="vn-box">
+    <div id="vn-dialog">
+      <img id="vn-dia-bg" src="DIA.png" alt="">
+      <div id="vn-content">
+        <div id="vn-text"></div>
+        <span id="vn-caret">▼</span>
+        <div id="vn-opts"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="vn-input-area">
+    <div id="vn-row">
+      <input id="vn-input" type="text" placeholder="TYPE" autocomplete="off" spellcheck="false" inputmode="text">
+      <button id="vn-mic" class="vn-icon-btn" onclick="toggleMic()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="9" y="2" width="6" height="12" rx="3" fill="white"/>
+          <path d="M5 11a7 7 0 0 0 14 0" stroke="white" stroke-width="2" stroke-linecap="round" fill="none"/>
+          <line x1="12" y1="18" x2="12" y2="22" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          <line x1="8" y1="22" x2="16" y2="22" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button id="vn-confirm" class="vn-icon-btn" onclick="submitAnswer()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <line x1="12" y1="20" x2="12" y2="4" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          <polyline points="5,11 12,4 19,11" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── LOADING ── -->
+<div class="screen" id="s-loading">
+  <h2 class="ld-title">Processing<span class="ld-cursor"></span></h2>
+  <p class="ld-note">Your order is with the chefs.<br>Please collect your dish's memory<br>on the receipt screen when ready.</p>
+</div>
+
+</div><!-- #app -->
+<script>
+// ── PRELOAD IMAGES ──
+function loadImg(src) {
+  return new Promise(res => {
+    const i = new Image(); i.onload = i.onerror = res; i.src = src;
+  });
+}
+const _imgReady = Promise.all(['DIALOGUE.jpg','bg_order.png','DIA.png','second.png'].map(loadImg));
+
+// ── CLOCK ──
+setInterval(() => {
+  document.getElementById('st-clock').textContent = new Date().toTimeString().slice(0,8);
+}, 1000);
+function setStatus(s) { document.getElementById('st-label').textContent = s; }
+
+// ── TTS ──
+let _voices = [];
+if (window.speechSynthesis) {
+  const loadV = () => { _voices = speechSynthesis.getVoices(); };
+  speechSynthesis.onvoiceschanged = loadV;
+  loadV();
+}
+const _narrationCache = {};
+function prefetchNarration(text) {
+  const cleanText = text.replace(/\n/g, ' ');
+  if (!_narrationCache[cleanText]) {
+    _narrationCache[cleanText] = fetch('/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: cleanText })
+    })
+      .then(r => r.json())
+      .then(d => d.audio || null)
+      .catch(() => null);
+  }
+  return _narrationCache[cleanText];
+}
+function speak(text) {
+  const cleanText = text.replace(/\n/g, ' ');
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  prefetchNarration(cleanText).then(audio => {
+    if (audio) playClonedVoice(audio);
+    else speakFallback(cleanText);
+  });
+}
+function playClonedVoice(base64) {
+  const audio = new Audio('data:audio/mpeg;base64,' + base64);
+  audio.play().catch(() => {});
+}
+function speakFallback(text) {
+  if (!window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.lang = 'en-US'; utt.rate = 0.85; utt.pitch = 0.72;
+  const v = _voices.find(v => v.lang.startsWith('en') && /google|alex|samantha/i.test(v.name))
+         || _voices.find(v => v.lang.startsWith('en'));
+  if (v) utt.voice = v;
+  speechSynthesis.speak(utt);
+}
+
+// ── STT ──
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null, isRec = false;
+let _recMediaRecorder = null, _recChunks = [];
+
+if (SpeechRec) {
+  recognition = new SpeechRec();
+  recognition.lang = 'en-US';
+  recognition.interimResults = true;
+  recognition.continuous = false;
+  recognition.onresult = e => {
+    document.getElementById('vn-input').value =
+      Array.from(e.results).map(r => r[0].transcript).join('');
+  };
+  recognition.onend = () => stopMic();
+  recognition.onerror = () => stopMic();
+}
+
+function openAnswerInput() {
+  document.getElementById('vn-input-area').classList.add('on');
+}
+
+function stopMic() {
+  isRec = false;
+  document.getElementById('vn-mic').classList.remove('rec');
+}
+
+async function toggleMic() {
+  document.getElementById('vn-input').blur();
+
+  if (recognition) {
+    if (isRec) {
+      recognition.stop(); stopMic();
+    } else {
+      document.getElementById('vn-input').value = '';
+      try { recognition.start(); } catch(e) {}
+      isRec = true;
+      document.getElementById('vn-mic').classList.add('rec');
+    }
+    return;
+  }
+  await toggleRecordAndTranscribe();
+}
+
+let _recStartTime = 0;
+const MIN_RECORDING_MS = 400;
+
+async function toggleRecordAndTranscribe() {
+  const btn = document.getElementById('vn-mic');
+
+  if (isRec) {
+    isRec = false;
+    btn.classList.remove('rec');
+    if (Date.now() - _recStartTime < MIN_RECORDING_MS) {
+      if (_recMediaRecorder && _recMediaRecorder.state !== 'inactive') _recMediaRecorder.stop();
+      return;
+    }
+    btn.classList.add('transcribing');
+    if (_recMediaRecorder && _recMediaRecorder.state !== 'inactive') _recMediaRecorder.stop();
+    return;
+  }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    console.error('mic access failed', err);
+    return;
+  }
+
+  const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+  _recMediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+  _recChunks = [];
+  _recMediaRecorder.ondataavailable = e => { if (e.data.size > 0) _recChunks.push(e.data); };
+  _recMediaRecorder.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    const recordingMs = Date.now() - _recStartTime;
+    if (recordingMs < MIN_RECORDING_MS || !_recChunks.length) {
+      btn.classList.remove('transcribing');
+      return;
+    }
+    const blob = new Blob(_recChunks, { type: _recMediaRecorder.mimeType || 'audio/mp4' });
+    const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+    const form = new FormData();
+    form.append('audio', blob, 'recording.' + ext);
+    try {
+      const res = await fetch('/stt', { method: 'POST', body: form });
+      const d = await res.json();
+      const input = document.getElementById('vn-input');
+      if (d.text) {
+        input.value = d.text;
+      } else if (!input.value) {
+        input.placeholder = "didn't catch that — try again";
+      }
+    } catch (err) {
+      console.error('transcription request failed', err);
+    }
+    btn.classList.remove('transcribing');
+  };
+
+  document.getElementById('vn-input').value = '';
+  _recStartTime = Date.now();
+  _recMediaRecorder.start(250);
+  isRec = true;
+  btn.classList.add('rec');
+}
+
+// ── SCREEN SWITCH ──
+function show(id) {
+  const next = document.getElementById(id);
+  if (!next) return;
+  document.querySelectorAll('.screen.on').forEach(s => {
+    s.classList.add('out');
+    s.classList.remove('on');
+    setTimeout(() => s.classList.remove('out'), 450);
+  });
+  void next.offsetWidth;
+  next.classList.add('on');
+}
+
+// ── TYPEWRITER ──
+let _twTimer = null;
+function typewrite(el, text, spd, onDone) {
+  clearInterval(_twTimer);
+  el.innerHTML = '';
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor';
+  el.appendChild(cursor);
+  let i = 0;
+  _twTimer = setInterval(() => {
+    if (i < text.length) {
+      el.insertBefore(document.createTextNode(text[i]), cursor);
+      i++;
+    } else {
+      clearInterval(_twTimer);
+      cursor.remove();
+      if (onDone) onDone();
+    }
+  }, spd);
+}
+function skipTypewriter(el, text) {
+  clearInterval(_twTimer);
+  el.textContent = text;
+}
+
+// ── VN SCRIPT ──
+const SCRIPT = [
+  { type:'say', text:'Hello, welcome to this restaurant.' },
+  { type:'say', text:'Today, our special menu is birthday cake —\nbaked for you by three chefs, together.' },
+  { type:'ask',
+    text:'Do you usually eat cake on your birthday?',
+    ph:'yes, no, sometimes...',
+    key:'birthday_cake_habit', qIndex: 1, qTotal: 4
+  },
+  { type:'ask',
+    text:'What flavour was the most memorable cake in your memory?',
+    ph:'sweet, chocolate, vanilla, unfamiliar...',
+    key:'memorable_flavour', qIndex: 2, qTotal: 4
+  },
+  { type:'ask',
+    text:'What did it look like?',
+    ph:'colour, texture, shape, temperature...',
+    key:'appearance', qIndex: 3, qTotal: 4
+  },
+  { type:'ask',
+    text:'Who did you eat it with, and where?',
+    ph:'place, time, people, atmosphere...',
+    key:'place_and_company', qIndex: 4, qTotal: 4
+  },
+  { type:'submit',
+    text:'Your memory file has been received.\n\nThe chef will now begin.'
+  },
+];
+
+let vnStep = 0;
+let vnAnswers = {};
+let vnReady = false;
+
+function startVN() {
+  speechSynthesis && speechSynthesis.cancel();
+  vnStep = 0; vnAnswers = {};
+  const consentText = 'By proceeding, you consent to being\nobserved and analysed.\n\nYour responses will be used to prepare\na personalised dish. Certain emotional\ntraces may remain in the system after\nthis experience ends.';
+  document.querySelectorAll('.screen.on').forEach(s => {
+    s.classList.add('out'); s.classList.remove('on');
+    setTimeout(() => s.classList.remove('out'), 400);
+  });
+  Promise.all([_imgReady, new Promise(r => setTimeout(r, 500))])
+    .then(() => {
+      document.getElementById('cs-text').textContent = '';
+      show('s-consent');
+      setTimeout(() => typewrite(document.getElementById('cs-text'), consentText, 55), 600);
+    });
+}
+
+function acceptConsent() {
+  show('s-vn');
+  setStatus('CONNECTED');
+  runStep();
+}
+
+function declineConsent() {
+  show('s-welcome');
+  setStatus('STANDBY');
+}
+
+function runStep() {
+  if (vnStep >= SCRIPT.length) return;
+  const s = SCRIPT[vnStep];
+  const textEl    = document.getElementById('vn-text');
+  const caretEl   = document.getElementById('vn-caret');
+  const optsEl    = document.getElementById('vn-opts');
+  const inputArea = document.getElementById('vn-input-area');
+  const counter   = document.getElementById('vn-step-counter');
+  const progress  = document.getElementById('vn-progress');
+
+  caretEl.style.display = 'none';
+  optsEl.innerHTML = ''; optsEl.classList.remove('on');
+  inputArea.classList.remove('on');
+  vnReady = false;
+
+  if (s.type === 'say' || s.type === 'ask' || s.type === 'submit') {
+    speak(s.text);
+  }
+
+  if (s.type === 'ask') {
+    const pct = ((s.qIndex - 1) / s.qTotal) * 100;
+    progress.style.width = pct + '%';
+    counter.style.display = 'block';
+    counter.textContent = `Q ${s.qIndex} / ${s.qTotal}`;
+  } else if (s.type === 'submit') {
+    progress.style.width = '100%';
+    counter.style.display = 'none';
+  }
+
+  if (s.type === 'say') {
+    typewrite(textEl, s.text, 30, () => {
+      vnReady = true;
+      caretEl.style.display = 'block';
+    });
+
+  } else if (s.type === 'ask') {
+    typewrite(textEl, s.text, 30, () => {
+      document.getElementById('vn-input').placeholder = s.ph || '';
+      document.getElementById('vn-input').value = '';
+      openAnswerInput();
+    });
+
+  } else if (s.type === 'submit') {
+    typewrite(textEl, s.text, 28, () => {
+      const btn = document.createElement('button');
+      btn.className = 'opt-btn primary';
+      btn.style.width = '100%';
+      btn.textContent = 'SUBMIT TO CHEF →';
+      btn.onclick = () => { optsEl.classList.remove('on'); triggerBuild(); };
+      optsEl.appendChild(btn);
+      optsEl.classList.add('on');
+    });
+  }
+}
+
+document.getElementById('s-vn').addEventListener('click', e => {
+  if (e.target.closest('#vn-opts') || e.target.closest('#vn-input-area')) return;
+  const s = SCRIPT[vnStep];
+  if (s && s.type !== 'say') return;
+
+  if (!vnReady) {
+    skipTypewriter(document.getElementById('vn-text'), s.text);
+    document.getElementById('vn-caret').style.display = 'block';
+    vnReady = true;
+    return;
+  }
+  vnStep++;
+  runStep();
+});
+
+document.getElementById('vn-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); submitAnswer(); }
+});
+
+function submitAnswer() {
+  const s = SCRIPT[vnStep];
+  if (!s || s.type !== 'ask') return;
+  const val = document.getElementById('vn-input').value.trim();
+  if (!val) { document.getElementById('vn-input').focus(); return; }
+  if (isRec) recognition.stop();
+  vnAnswers[s.key] = val;
+  document.getElementById('vn-input-area').classList.remove('on');
+  vnStep++;
+  runStep();
+}
+
+// ── BUILD ──
+let _pollTimer = null;
+
+async function triggerBuild() {
+  setStatus('PROCESSING');
+  show('s-loading');
+
+  await submitBuildWithRetry();
+  pollUntilDone();
+}
+
+// the kitchen display (and the receipt screen) may still be mid-performance
+// on a previous order — the backend rejects with 409 in that case (see
+// server_pi.py's busy-guard, which now stays busy through 'done' until the
+// receipt screen's Finish button resets it) rather than silently
+// overwriting data those screens are still reading. Retry quietly behind
+// the loading screen until it's accepted.
+async function submitBuildWithRetry() {
+  while (true) {
+    let res;
+    try {
+      res = await fetch('/build-dish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers: vnAnswers })
+      });
+    } catch {
+      await new Promise(r => setTimeout(r, 3000));
+      continue;
+    }
+    if (res.status === 409) {
+      await new Promise(r => setTimeout(r, 3000));
+      continue;
+    }
+    return;
+  }
+}
+
+function pollUntilDone() {
+  clearInterval(_pollTimer);
+  _pollTimer = setInterval(() => {
+    fetch('/state').then(r => r.json()).then(data => {
+      // wait for the kitchen display's own performance to finish
+      // (showPhase), not just the raw backend generation status — the
+      // guest's receipt is waiting for them on the receipt screen once
+      // this shows done
+      if (data.showPhase === 'done') {
+        clearInterval(_pollTimer);
+        setTimeout(returnToWelcome, 1800);
+      }
+    }).catch(() => {});
+  }, 2000);
+}
+
+function returnToWelcome() {
+  speechSynthesis && speechSynthesis.cancel();
+  vnStep = 0; vnAnswers = {};
+  document.getElementById('vn-input').value = '';
+  document.getElementById('vn-progress').style.width = '0%';
+  setStatus('STANDBY');
+  show('s-welcome');
+}
+
+</script>
+</body>
+</html>
