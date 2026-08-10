@@ -226,17 +226,25 @@
   #dish-reveal.on { opacity: 1; }
 
   /* captions the three chefs' relay commentary during stage1-3, in case
-     the spoken audio is hard to hear in the exhibition space */
-  #relay-caption {
-    position: absolute; left: 50%; bottom: 6%; transform: translateX(-50%);
-    width: 84%; max-width: 900px;
-    z-index: 820; text-align: center;
-    font-family: 'Courier Prime', monospace;
-    font-size: 22px; line-height: 1.5; color: #fff;
-    background: rgba(0,0,0,0.6); padding: 16px 26px; border-radius: 4px;
+     the spoken audio is hard to hear in the exhibition space — sits on
+     top of the dialogue.png artwork instead of a flat box */
+  #relay-caption-wrap {
+    position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%);
+    width: 70%; max-width: 760px;
+    aspect-ratio: 3508 / 2480;
+    background: url('dialogue.png') center center / contain no-repeat;
+    z-index: 820;
+    display: flex; align-items: center; justify-content: center;
+    padding: 4% 10%;
     opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
   }
-  #relay-caption.on { opacity: 1; }
+  #relay-caption-wrap.on { opacity: 1; }
+  #relay-caption {
+    text-align: center;
+    font-family: 'Courier Prime', monospace;
+    font-size: 20px; line-height: 1.5; color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  }
 
   /* ── STATUS BAR ── */
   #bar {
@@ -260,7 +268,7 @@
   <img id="idle-cover" alt="">
   <div id="idle-dim"></div>
   <img id="dish-reveal" alt="">
-  <div id="relay-caption"></div>
+  <div id="relay-caption-wrap"><div id="relay-caption"></div></div>
 
   <div id="book">
     <div id="dim-overlay"></div>
@@ -329,7 +337,7 @@ setInterval(() => {
 function resetDisplay() {
   document.getElementById('plate-mask').innerHTML = '';
   document.getElementById('dish-reveal').classList.remove('on');
-  document.getElementById('relay-caption').classList.remove('on');
+  document.getElementById('relay-caption-wrap').classList.remove('on');
   clearInterval(_captionTimer);
 }
 
@@ -465,7 +473,8 @@ function typewriteCaption(el, text, totalMs) {
 async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText) {
   const video = document.getElementById('show-video');
   const audio = document.getElementById('relay-audio');
-  const caption = document.getElementById('relay-caption');
+  const captionWrap = document.getElementById('relay-caption-wrap');
+  const captionText = document.getElementById('relay-caption');
 
   video.src = videoSrc;
   video.loop = false;
@@ -475,17 +484,17 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText)
 
   if (!audioBase64) {
     if (lineText) {
-      caption.classList.add('on');
-      typewriteCaption(caption, lineText, naturalDuration * 1000);
+      captionWrap.classList.add('on');
+      typewriteCaption(captionText, lineText, naturalDuration * 1000);
     } else {
-      caption.classList.remove('on');
+      captionWrap.classList.remove('on');
     }
     try { await video.play(); } catch {}
     await sleep(naturalDuration * 1000);
     video.classList.remove('on');
     video.pause();
     clearInterval(_captionTimer);
-    caption.classList.remove('on');
+    captionWrap.classList.remove('on');
     return;
   }
 
@@ -500,10 +509,10 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText)
   video.playbackRate = Math.max(0.25, Math.min(4, naturalDuration / audioDuration));
 
   if (lineText) {
-    caption.classList.add('on');
-    typewriteCaption(caption, lineText, audioDuration * 1000);
+    captionWrap.classList.add('on');
+    typewriteCaption(captionText, lineText, audioDuration * 1000);
   } else {
-    caption.classList.remove('on');
+    captionWrap.classList.remove('on');
   }
 
   try { await video.play(); } catch {}
@@ -518,7 +527,7 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText)
   video.pause();
   video.playbackRate = 1;
   clearInterval(_captionTimer);
-  caption.classList.remove('on');
+  captionWrap.classList.remove('on');
 }
 
 async function playLoadingStage(videoSrc, isDone) {
