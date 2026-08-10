@@ -589,11 +589,17 @@ async function playLoadingStage(videoSrc, isDone) {
     imageData = d.image;
   } catch {}
 
+  const reveal = document.getElementById('dish-reveal');
   if (imageData) {
-    const reveal = document.getElementById('dish-reveal');
     reveal.src = 'data:image/png;base64,' + imageData;
-    reveal.classList.add('on');
+  } else {
+    // AI generation failed all 3 retries, or ran past the wait cap — a
+    // live show can't end with nothing on screen, so fall back to a
+    // pre-made cake image rather than looping back to idle empty-handed
+    console.warn('no AI-generated image — falling back to fallback_cake.jpg');
+    reveal.src = 'fallback_cake.jpg';
   }
+  reveal.classList.add('on');
 
   video.classList.remove('on');
   video.loop = false;
