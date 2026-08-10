@@ -30,6 +30,12 @@
     overflow: hidden;
     background: var(--bg);
   }
+  /* iPad-width screens — the 520px cap was sized for a phone and left
+     large black margins either side on a tablet, making the whole UI
+     look small/narrow in the middle of the screen */
+  @media (min-width: 700px) {
+    #app { max-width: 900px; }
+  }
   #app::after {
     content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 9999;
     background: repeating-linear-gradient(0deg,rgba(0,0,0,0.15) 0px,rgba(0,0,0,0.15) 1px,transparent 1px,transparent 3px);
