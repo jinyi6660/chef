@@ -146,7 +146,7 @@
   /* ── METHOD ZONE — AE overlay video (right page of back.jpg) ── */
   #method-video-wrap {
     position: absolute;
-    left: 53%; top: 5%;
+    left: 48%; top: 5%;
     width: 41.5%;
     height: 90%;
     overflow: hidden;
@@ -366,7 +366,10 @@ function revealStage() {
   // the page was actually visible it looked like it was lagging to catch up.
   const mv = document.getElementById('method-video');
   mv.pause();
-  mv.currentTime = 0;
+  // the source file itself has ~4s of blank/transparent lead-in before
+  // any text actually appears (confirmed by sampling frames) — skip
+  // straight past it instead of sitting on an empty page for a while
+  mv.currentTime = 4;
   mv.playbackRate = 0.5;
   setTimeout(() => {
     mv.play().catch(() => {});
