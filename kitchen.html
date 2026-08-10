@@ -310,6 +310,33 @@
 </div>
 
 <script>
+// ── AUDIO-ONLY MODE ───────────────────────────────────────────
+// kitchen.html?audio_only=1 — for a second real instance of this exact
+// page run on the iPad purely for correctly-timed headphone audio
+// (replacing the old poll-and-guess mirror in order.html). Skips loading
+// and playing every video entirely — running two full copies of this
+// show at once was pulling down the same large video files on both
+// devices simultaneously and stalling out the connection, leaving a
+// black screen with audio still playing underneath (audio files are
+// tiny by comparison and were never affected). Phase-posting, timing,
+// and every actual sound still run identically either way.
+const AUDIO_ONLY = new URLSearchParams(location.search).get('audio_only') === '1';
+if (AUDIO_ONLY) {
+  // #method-video has autoplay + <source> children, so the browser starts
+  // fetching it the instant the HTML is parsed — before this very script
+  // block even runs. Strip its sources and force-abort the in-progress
+  // fetch immediately, rather than only guarding the later JS play()
+  // calls (which would leave the initial autoplay download running).
+  const mv = document.getElementById('method-video');
+  if (mv) {
+    mv.autoplay = false;
+    mv.pause();
+    mv.removeAttribute('src');
+    mv.querySelectorAll('source').forEach(s => s.remove());
+    mv.load();
+  }
+}
+
 // ── EMOTION TAG placement (relative to #plate-mask, inside the plate) ───────
 // picks a random point inside a safe ellipse that stays clear of the
 // plate's clip-path edge, plus a random tilt
@@ -328,6 +355,7 @@ function randomPlatePos() {
 // order has come in yet), and only starts actually playing once a guest
 // submits — then it plays through once, before the paper book is revealed.
 const PAGE_TURN_VIDEO_SRC = 'back2.mp4'; // re-exported at 1834x866 to match the new stage-window ratio
+const PAGE_TURN_DURATION_SEC = 32.04; // back2.mp4's real length — used to time audio-only mode without loading the file at all
 const SKIP_PAGE_TURN = false;
 
 // ── UTILS ─────────────────────────────────────────────────────
@@ -368,16 +396,18 @@ function revealStage() {
   // Starting it immediately meant the text animation was already a beat
   // into playing while still invisible during the fade, so by the time
   // the page was actually visible it looked like it was lagging to catch up.
-  const mv = document.getElementById('method-video');
-  mv.pause();
-  // the source file itself has ~4s of blank/transparent lead-in before
-  // any text actually appears (confirmed by sampling frames) — skip
-  // straight past it instead of sitting on an empty page for a while
-  mv.currentTime = 4;
-  mv.playbackRate = 0.5;
-  setTimeout(() => {
-    mv.play().catch(() => {});
-  }, 1200);
+  if (!AUDIO_ONLY) {
+    const mv = document.getElementById('method-video');
+    mv.pause();
+    // the source file itself has ~4s of blank/transparent lead-in before
+    // any text actually appears (confirmed by sampling frames) — skip
+    // straight past it instead of sitting on an empty page for a while
+    mv.currentTime = 4;
+    mv.playbackRate = 0.5;
+    setTimeout(() => {
+      mv.play().catch(() => {});
+    }, 1200);
+  }
   // recipe narration starts a beat after the text-overlay video itself
   // (it was landing before the on-screen text actually appeared) — at
   // its own natural pace (speeding it up to match the video's ~32s
@@ -512,11 +542,13 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText)
   const captionWrap = document.getElementById('relay-caption-wrap');
   const captionText = document.getElementById('relay-caption');
 
-  video.src = videoSrc;
-  video.loop = false;
-  video.playbackRate = 1;
-  video.classList.add('on');
-  video.load();
+  if (!AUDIO_ONLY) {
+    video.src = videoSrc;
+    video.loop = false;
+    video.playbackRate = 1;
+    video.classList.add('on');
+    video.load();
+  }
 
   if (!audioBase64) {
     if (lineText) {
@@ -525,10 +557,9 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText)
     } else {
       captionWrap.classList.remove('on');
     }
-    try { await video.play(); } catch {}
+    if (!AUDIO_ONLY) { try { await video.play(); } catch {} }
     await sleep(naturalDuration * 1000);
-    video.classList.remove('on');
-    video.pause();
+    if (!AUDIO_ONLY) { video.classList.remove('on'); video.pause(); }
     clearInterval(_captionTimer);
     captionWrap.classList.remove('on');
     return;
@@ -541,8 +572,10 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText)
     setTimeout(resolve, 3000);
   });
   const audioDuration = (audio.duration && isFinite(audio.duration)) ? audio.duration : naturalDuration;
-  // stretch/compress the video so it finishes exactly when the audio does
-  video.playbackRate = Math.max(0.25, Math.min(4, naturalDuration / audioDuration));
+  if (!AUDIO_ONLY) {
+    // stretch/compress the video so it finishes exactly when the audio does
+    video.playbackRate = Math.max(0.25, Math.min(4, naturalDuration / audioDuration));
+  }
 
   if (lineText) {
     captionWrap.classList.add('on');
@@ -551,7 +584,7 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText)
     captionWrap.classList.remove('on');
   }
 
-  try { await video.play(); } catch {}
+  if (!AUDIO_ONLY) { try { await video.play(); } catch {} }
   try { await audio.play(); } catch (err) { console.error('stage audio failed to play', err); }
 
   await new Promise(resolve => {
@@ -559,20 +592,20 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText)
     setTimeout(resolve, (audioDuration + 2) * 1000);
   });
 
-  video.classList.remove('on');
-  video.pause();
-  video.playbackRate = 1;
+  if (!AUDIO_ONLY) { video.classList.remove('on'); video.pause(); video.playbackRate = 1; }
   clearInterval(_captionTimer);
   captionWrap.classList.remove('on');
 }
 
 async function playLoadingStage(videoSrc, isDone) {
   const video = document.getElementById('show-video');
-  video.src = videoSrc;
-  video.loop = true;
-  video.classList.add('on');
-  video.load();
-  try { await video.play(); } catch {}
+  if (!AUDIO_ONLY) {
+    video.src = videoSrc;
+    video.loop = true;
+    video.classList.add('on');
+    video.load();
+    try { await video.play(); } catch {}
+  }
 
   // "microwave on/run" loops for as long as the image is still generating
   // (unknown length — a few seconds to a few minutes), then the "off +
@@ -622,9 +655,7 @@ async function playLoadingStage(videoSrc, isDone) {
   }
   reveal.classList.add('on');
 
-  video.classList.remove('on');
-  video.loop = false;
-  video.pause();
+  if (!AUDIO_ONLY) { video.classList.remove('on'); video.loop = false; video.pause(); }
 }
 
 async function playCookingStages() {
@@ -720,6 +751,7 @@ async function playShowVideo(src, { loopUntil, keepVisible } = {}) {
 // forward a tiny amount (not skip ahead to later content) purely to force
 // a real decoded frame to exist before snapshotting it.
 async function showIdlePageTurnFrame() {
+  if (AUDIO_ONLY) return; // purely visual — nothing to capture, no video to load
   const video = document.getElementById('show-video');
   const cover = document.getElementById('idle-cover');
   video.src = PAGE_TURN_VIDEO_SRC;
@@ -762,6 +794,21 @@ async function showIdlePageTurnFrame() {
 // plays the page-turn video through from the start — swaps the static
 // idle-cover image back out for the real (playing) <video> element.
 async function playIdlePageTurn() {
+  const pageturnAudio = document.getElementById('pageturn-audio');
+  pageturnAudio.currentTime = 0;
+  pageturnAudio.playbackRate = 0.7;
+  pageturnAudio.volume = 0.25;
+  pageturnAudio.play().catch(() => {});
+
+  if (AUDIO_ONLY) {
+    // no video, no 'ended' event to time off — wait out the real file's
+    // known duration instead, so this instance's own pacing still lines
+    // up with the real kitchen display's
+    await sleep(PAGE_TURN_DURATION_SEC * 1000);
+    pageturnAudio.pause();
+    return;
+  }
+
   document.getElementById('idle-cover').classList.remove('on');
 
   const video = document.getElementById('show-video');
@@ -781,12 +828,6 @@ async function playIdlePageTurn() {
   // page-turn rustle, slowed down and quiet, starts with the video and is
   // cut off the moment the video itself ends — doesn't need to finish
   // naturally, just needs to never outlast the picture
-  const pageturnAudio = document.getElementById('pageturn-audio');
-  pageturnAudio.currentTime = 0;
-  pageturnAudio.playbackRate = 0.7;
-  pageturnAudio.volume = 0.25;
-  pageturnAudio.play().catch(() => {});
-
   const safetyMs = (video.duration && isFinite(video.duration))
     ? video.duration * 1000 + 3000
     : 90000;
@@ -891,9 +932,14 @@ async function runShow(state) {
   // longer than the video's one pass, so also hold here until it's
   // actually finished talking — otherwise it would get cut off mid-line
   // the moment the (shorter, silent) video ends.
-  const mv = document.getElementById('method-video');
-  if (!mv.ended) {
-    await new Promise(resolve => mv.addEventListener('ended', resolve, { once: true }));
+  // In AUDIO_ONLY mode there's no video at all — mv.ended would stay
+  // false forever with no 'ended' event ever coming, hanging this
+  // permanently, so skip straight to the narration wait below instead.
+  if (!AUDIO_ONLY) {
+    const mv = document.getElementById('method-video');
+    if (!mv.ended) {
+      await new Promise(resolve => mv.addEventListener('ended', resolve, { once: true }));
+    }
   }
   if (!recipeNarration.ended && !recipeNarration.paused) {
     await new Promise(resolve => {
@@ -948,9 +994,11 @@ async function startDemo() {
   await showTags(DEMO_TAGS);
 
   // once the method text video finishes, follow it with 合成3 in full
-  const mv = document.getElementById('method-video');
-  if (!mv.ended) {
-    await new Promise(resolve => mv.addEventListener('ended', resolve, { once: true }));
+  if (!AUDIO_ONLY) {
+    const mv = document.getElementById('method-video');
+    if (!mv.ended) {
+      await new Promise(resolve => mv.addEventListener('ended', resolve, { once: true }));
+    }
   }
   const recipeNarrationDemo = document.getElementById('recipe-narration-audio');
   if (!recipeNarrationDemo.ended && !recipeNarrationDemo.paused) {

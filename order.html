@@ -319,17 +319,10 @@
 <body>
 <div id="app">
 
-<!-- plays the kitchen display's greeting + relay voices on this iPad too,
-     for headphones plugged in here while the guest waits on this screen -->
-<audio id="kitchen-audio"></audio>
-<!-- background layers that play *alongside* the sequential queue above
-     (ambience/narration overlapping chef voices on kitchen.html itself) -->
-<audio id="mirror-pageturn-audio" src="pageturn_sound.wav"></audio>
-<audio id="mirror-reading-ambient-audio" src="reading_page_ambient.wav"></audio>
-<audio id="mirror-recipe-narration-audio" src="recipe_narration.mp3"></audio>
-<audio id="mirror-stage123-ambient-audio" src="stage123_ambient.wav" loop></audio>
-<audio id="mirror-stage4-loop-audio" src="stage4_loop.wav" loop></audio>
-<audio id="mirror-stage4-end-audio" src="stage4_end.wav"></audio>
+<!-- headphone audio for the kitchen performance now comes from running a
+     real second instance of kitchen.html (kitchen.html?audio_only=1) in
+     its own tab, not from guessing/replicating it here — see kitchen.html
+     for why the old poll-and-approximate mirror was removed. -->
 <!-- shared, reusable element for the cloned-voice VN narration (speak())
      — a persistent element unlocked once by a direct tap, instead of a
      new Audio() per line, which Safari never actually unlocks for later
@@ -679,12 +672,23 @@ let vnStep = 0;
 let vnAnswers = {};
 let vnReady = false;
 
+// Safari/iOS only allows an <audio> element to autoplay later (from an
+// async fetch callback, not a direct tap) once THAT SPECIFIC element has
+// already been played from within a real user gesture at least once —
+// this is the very first tap of the whole experience, so unlock
+// narration-audio here, synchronously, inside the real gesture.
+function primeNarrationAudio() {
+  const a = document.getElementById('narration-audio');
+  if (!a) return;
+  a.muted = true;
+  const p = a.play();
+  const finish = () => { a.pause(); a.currentTime = 0; a.muted = false; };
+  if (p && p.then) p.then(finish).catch(finish);
+  else finish();
+}
+
 function startVN() {
-  // this is the very first tap of the whole experience — unlock every
-  // audio element here, synchronously, inside the real gesture, or
-  // Safari silently refuses their first-ever play() call later on
-  // (which happens from inside an async fetch callback, not a tap)
-  primeMirrorAudioElements();
+  primeNarrationAudio();
   speechSynthesis && speechSynthesis.cancel();
   speak('Hello, welcome to this restaurant.').then(() => {
     return speak("I'll be your server today, jinyi.");
@@ -802,228 +806,23 @@ function submitAnswer() {
   runStep();
 }
 
-// ── KITCHEN AUDIO MIRROR ──
-// headphones are plugged into this iPad, so it plays the same greeting +
-// relay voices in parallel, driven by the same /state polling already
-// used to wait for showPhase. Not frame-synced to kitchen.html's video —
-// just triggered by the same phase data.
-//
-// Greeting order matters: fetching it is a separate async request
-// (/state/voice), while relay lines arrive synchronously inside /state.
-// If relay lines are queued as soon as they're seen, they'd win that race
-// every time and the greeting would play last instead of first — so relay
-// lines are held back until the greeting is either fetched or confirmed
-// absent/timed-out.
-let _mirrorGreetingState = 'pending'; // 'pending' | 'fetching' | 'resolved'
-let _mirrorRelayPlayed = 0;
-let _mirrorQueue = [];
-let _mirrorPlaying = false;
-let _mirrorStartTime = 0;
-const MIRROR_GREETING_TIMEOUT_MS = 10000;
-
-let _mirrorPhase = null; // last showPhase we've already reacted to
-let _mirrorStage4Started = false;
-
-function resetKitchenAudioMirror() {
-  _mirrorGreetingState = 'pending';
-  _mirrorRelayPlayed = 0;
-  _mirrorQueue = [];
-  _mirrorPlaying = false;
-  _mirrorStartTime = Date.now();
-  _mirrorPhase = null;
-  _mirrorStage4Started = false;
-  const audio = document.getElementById('kitchen-audio');
-  audio.pause();
-  audio.src = '';
-  ['mirror-pageturn-audio', 'mirror-reading-ambient-audio', 'mirror-recipe-narration-audio',
-   'mirror-stage123-ambient-audio', 'mirror-stage4-loop-audio', 'mirror-stage4-end-audio']
-    .forEach(id => { const a = document.getElementById(id); a.pause(); a.currentTime = 0; });
-}
-
-function queueMirrorAudio(src) {
-  _mirrorQueue.push(src);
-  playNextMirrorAudio();
-}
-
-async function playNextMirrorAudio() {
-  if (_mirrorPlaying || !_mirrorQueue.length) return;
-  _mirrorPlaying = true;
-  const src = _mirrorQueue.shift();
-  const audio = document.getElementById('kitchen-audio');
-  // base64 TTS audio is always a long string; a short one is a plain
-  // static file path (e.g. the greeting bell sound effect).
-  audio.src = src.length < 300 ? src : 'data:audio/mpeg;base64,' + src;
-  await new Promise(resolve => {
-    audio.addEventListener('ended', resolve, { once: true });
-    audio.play().catch(resolve);
-    setTimeout(resolve, 20000);
-  });
-  _mirrorPlaying = false;
-  playNextMirrorAudio();
-}
-
-function flushMirrorRelay(lines) {
-  if (lines.length > _mirrorRelayPlayed) {
-    for (let i = _mirrorRelayPlayed; i < lines.length; i++) {
-      if (lines[i] && lines[i].audio) queueMirrorAudio(lines[i].audio);
-    }
-    _mirrorRelayPlayed = lines.length;
-  }
-}
-
-// background layers that play in parallel with the sequential voice
-// queue above, mirroring kitchen.html's own ambience/narration tracks —
-// driven off showPhase transitions since this screen has no video of its
-// own to hang exact timing off of.
-function handleMirrorPhaseTransition(data) {
-  if (data.showPhase === _mirrorPhase) return;
-  const prevPhase = _mirrorPhase;
-  _mirrorPhase = data.showPhase;
-
-  const pageturn = document.getElementById('mirror-pageturn-audio');
-  const readingAmbient = document.getElementById('mirror-reading-ambient-audio');
-  const recipeNarration = document.getElementById('mirror-recipe-narration-audio');
-
-  if (data.showPhase === 'pageturn') {
-    pageturn.playbackRate = 0.7;
-    pageturn.volume = 0.25;
-    pageturn.currentTime = 0;
-    pageturn.play().catch(() => {});
-  } else if (prevPhase === 'pageturn') {
-    pageturn.pause();
-  }
-
-  if (data.showPhase === 'reading') {
-    readingAmbient.volume = 0.12;
-    readingAmbient.currentTime = 0;
-    readingAmbient.play().catch(() => {});
-    recipeNarration.volume = 0.8;
-    recipeNarration.playbackRate = 1;
-    recipeNarration.currentTime = 0;
-    recipeNarration.play().catch(() => {});
-  } else if (prevPhase === 'reading') {
-    readingAmbient.pause();
-    recipeNarration.pause();
-  }
-
-  if (data.showPhase === 'cooking') {
-    const stage123 = document.getElementById('mirror-stage123-ambient-audio');
-    stage123.volume = 0.15;
-    stage123.currentTime = 0;
-    stage123.play().catch(() => {});
-  }
-
-  if (data.showPhase === 'done' || (prevPhase === 'cooking' && data.showPhase !== 'cooking')) {
-    document.getElementById('mirror-stage123-ambient-audio').pause();
-    document.getElementById('mirror-stage4-loop-audio').pause();
-  }
-}
-
-function updateKitchenAudioMirror(data) {
-  const lines = data.relayLines || [];
-  // relayLines is usually already full long before kitchen.html actually
-  // starts playing chef 1's video+audio (it's much slower — greeting,
-  // pageturn, reading all come first). Hold relay playback back until
-  // kitchen.html has posted the same 'cooking' phase transition it uses
-  // right before it starts its own per-chef video+audio sequence.
-  const cookingStarted = data.showPhase === 'cooking' || data.showPhase === 'done';
-
-  try { handleMirrorPhaseTransition(data); } catch (err) { console.error('mirror phase handler failed', err); }
-
-  // once all 3 chefs have been queued, kitchen.html moves on from the
-  // stage1-3 ambience into the stage4 "generating image" loop/end sounds
-  if (cookingStarted && _mirrorRelayPlayed >= 3) {
-    const stage123 = document.getElementById('mirror-stage123-ambient-audio');
-    const stage4Loop = document.getElementById('mirror-stage4-loop-audio');
-    const stage4End = document.getElementById('mirror-stage4-end-audio');
-    if (data.hasImage) {
-      if (!stage4Loop.paused) stage4Loop.pause();
-      if (!stage123.paused) stage123.pause();
-      if (_mirrorStage4Started && stage4End.paused && stage4End.currentTime === 0) {
-        stage4End.volume = 0.5;
-        stage4End.play().catch(() => {});
-      }
-      _mirrorStage4Started = false;
-    } else if (!_mirrorStage4Started) {
-      _mirrorStage4Started = true;
-      stage123.pause();
-      stage4Loop.volume = 0.3;
-      stage4Loop.currentTime = 0;
-      stage4Loop.play().catch(() => {});
-    }
-  }
-
-  if (_mirrorGreetingState === 'pending') {
-    if (data.hasGreetingAudio) {
-      _mirrorGreetingState = 'fetching';
-      fetch('/state/voice').then(r => r.json()).then(d => {
-        _mirrorGreetingState = 'resolved';
-        if (d.audio) {
-          queueMirrorAudio(d.audio);
-          queueMirrorAudio('greeting_bell.wav');
-        }
-        if (cookingStarted) flushMirrorRelay(lines);
-      }).catch(() => {
-        _mirrorGreetingState = 'resolved';
-        if (cookingStarted) flushMirrorRelay(lines);
-      });
-      return;
-    }
-    if (Date.now() - _mirrorStartTime < MIRROR_GREETING_TIMEOUT_MS) {
-      return;
-    }
-    _mirrorGreetingState = 'resolved';
-  }
-
-  if (_mirrorGreetingState === 'fetching') return;
-  if (cookingStarted) flushMirrorRelay(lines);
-}
+// headphone audio for the kitchen performance now comes from opening a
+// real second instance of kitchen.html directly (kitchen.html?audio_only=1
+// in its own tab) instead of trying to poll-and-approximate it here — see
+// kitchen.html for why (autoplay-unlock issues, polling lag, phase-vs-
+// queue drift all made the old mirror unreliable).
 
 // ── BUILD ──
 let _pollTimer = null;
 
 const ORDER_SENT_LINE = "That's all? Thank you for your order — please don't take off your headphones.";
 
-// Safari/iOS only allows an <audio> element to autoplay later (from a
-// setInterval/fetch callback, not a direct tap) once THAT SPECIFIC
-// element has already been played from within a real user gesture at
-// least once. kitchen-audio happened to get this "unlock" for free
-// because its very first queued play landed close enough to the submit
-// tap, but the newer ambience/narration elements never got one — their
-// first real .play() call (from inside the phase-polling loop) was
-// silently rejected every time, which is why they never made any sound
-// at all rather than just being late. Play+immediately-pause every
-// mirror <audio> element right here, still inside the tap itself.
-function primeMirrorAudioElements() {
-  ['kitchen-audio', 'narration-audio', 'mirror-pageturn-audio', 'mirror-reading-ambient-audio',
-   'mirror-recipe-narration-audio', 'mirror-stage123-ambient-audio',
-   'mirror-stage4-loop-audio', 'mirror-stage4-end-audio'].forEach(id => {
-    const a = document.getElementById(id);
-    if (!a) return;
-    // muted so priming is silent even if playback genuinely starts
-    // before pause() lands, and we wait for the real play() promise
-    // (not just call+immediately-pause) since pausing before playback
-    // has actually begun doesn't reliably count as a real unlock
-    a.muted = true;
-    const p = a.play();
-    const finish = () => { a.pause(); a.currentTime = 0; a.muted = false; };
-    if (p && p.then) p.then(finish).catch(finish);
-    else finish();
-  });
-}
-
 async function triggerBuild() {
-  primeMirrorAudioElements();
   setStatus('PROCESSING');
   show('s-loading');
-  resetKitchenAudioMirror();
-  // guest-facing line, queued first so it plays ahead of the kitchen's
-  // own "hey chef" greeting in the same sequential audio queue — fetched
-  // straight into the mirror queue rather than through speak() so it
-  // can't race/overlap with the greeting that follows it
-  prefetchNarration(ORDER_SENT_LINE).then(audio => {
-    if (audio) queueMirrorAudio(audio);
-  });
+  // guest-facing line, fire-and-forget through the same speak() path as
+  // the rest of the VN narration
+  speak(ORDER_SENT_LINE);
 
   await submitBuildWithRetry();
   pollUntilDone();
@@ -1060,7 +859,6 @@ function pollUntilDone() {
   clearInterval(_pollTimer);
   _pollTimer = setInterval(() => {
     fetch('/state').then(r => r.json()).then(data => {
-      updateKitchenAudioMirror(data);
       // wait for the kitchen display's own performance to finish
       // (showPhase), not just the raw backend generation status — the
       // guest's receipt is waiting for them on the receipt screen once
