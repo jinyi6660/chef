@@ -940,7 +940,12 @@ async function startDemo() {
   setPhase('DEMO — COMPLETE');
 }
 
+// demo hotkey is on by default (for ongoing testing) — on the actual
+// exhibition day, load this page as kitchen.html?demo=off so an
+// accidental keypress can't interrupt a real live show
+const DEMO_HOTKEY_ENABLED = new URLSearchParams(location.search).get('demo') !== 'off';
 window.addEventListener('keydown', e => {
+  if (!DEMO_HOTKEY_ENABLED) return;
   if ((e.key === 't' || e.key === 'T') && e.target === document.body) startDemo();
 });
 
