@@ -580,6 +580,15 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText)
     video.playbackRate = 1;
     video.classList.add('on');
     video.load();
+    // play immediately instead of waiting until after the audio's
+    // metadata loads below — that wait (up to 3s) used to leave the
+    // screen sitting on a blank/undecoded video frame between every
+    // stage transition, which read as the screen "going black" each
+    // time. Starting playback right away keeps the picture moving
+    // continuously; the playback-rate stretch to match audio length
+    // still gets applied a moment later, just as a small speed change
+    // mid-play rather than a delay before anything shows at all.
+    try { await video.play(); } catch {}
   }
 
   if (!audioBase64) {
@@ -589,7 +598,6 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText)
     } else {
       captionWrap.classList.remove('on');
     }
-    if (!AUDIO_ONLY) { try { await video.play(); } catch {} }
     await sleep(naturalDuration * 1000);
     if (!AUDIO_ONLY) { video.classList.remove('on'); video.pause(); }
     clearInterval(_captionTimer);
@@ -616,7 +624,6 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText)
     captionWrap.classList.remove('on');
   }
 
-  if (!AUDIO_ONLY) { try { await video.play(); } catch {} }
   try { await audio.play(); } catch (err) { console.error('stage audio failed to play', err); }
 
   await new Promise(resolve => {
@@ -974,6 +981,13 @@ async function runShow(state) {
   // already); left page grows the guest's own extracted words on the plate
   setPhase('READING');
   await postPhase('reading');
+  // the reading phase has a 30s+ floor either way (MIN_READING_MS below),
+  // so there's always time to warm the browser's cache for the first
+  // cooking-stage video here — without this, the moment the book faded
+  // out and stage1.mp4's src was set for the first time, the browser had
+  // to start its fetch from scratch, leaving a beat of blank video before
+  // any frame was actually decoded.
+  if (!AUDIO_ONLY) fetch(STAGE_VIDEOS[0]).catch(() => {});
   const readingStart = Date.now();
   let cur = state;
   // the backend now always falls back to plain-word tags on its own AI
