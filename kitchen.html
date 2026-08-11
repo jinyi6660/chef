@@ -520,17 +520,29 @@ setInterval(async () => {
   }
 }, 3000);
 
-// tells the backend which beat of the performance we're on — the
-// ordering screen (index.html) waits for this to reach "done" before
-// it reveals the receipt, instead of the raw generation status
+// tells the backend which beat of the performance we're on — order.html
+// and receipt.html both wait for this to reach "done" before they reveal
+// the receipt, instead of the raw generation status. A single failed
+// fetch here (transient network blip, a deploy restart window) used to
+// silently lose that phase transition forever — for every phase except
+// "done" the next call would still get through and catch things up, but
+// "done" is the last one ever posted, so a lost "done" left every other
+// screen polling forever for a state that would never arrive even though
+// this display had already moved on locally. Retry a few times before
+// giving up.
 async function postPhase(phase) {
-  try {
-    await fetch('/phase', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phase }),
-    });
-  } catch {}
+  for (let i = 0; i < 4; i++) {
+    try {
+      const r = await fetch('/phase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phase }),
+      });
+      if (r.ok) return;
+    } catch {}
+    await sleep(600);
+  }
+  console.error(`postPhase('${phase}') failed after retries`);
 }
 
 // plays the per-order AI-waiter greeting line. This is fixed text ("Hey
