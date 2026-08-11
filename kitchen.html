@@ -388,6 +388,12 @@ function hideStage() {
   document.getElementById('book').classList.remove('revealed');
 }
 function revealStage() {
+  // belt-and-suspenders: playIdlePageTurn() already stops this itself
+  // when the page-turn video ends, but if anything upstream ever skips
+  // or short-circuits that (an error, a race, SKIP_PAGE_TURN), the rustle
+  // sound could otherwise keep playing into the reading phase — guarantee
+  // it's off by the time the recipe book actually starts.
+  document.getElementById('pageturn-audio').pause();
   // book/bg reveal itself is now held back until the text-overlay video is
   // about to actually start (see setTimeout below) instead of firing
   // immediately — revealing the book first meant the guest saw a few
@@ -1042,6 +1048,10 @@ async function runShow(state) {
     console.error('runShow crashed mid-performance — forcing fallback cake reveal', err);
     hideStage();
     document.getElementById('show-video').classList.remove('on');
+    // whatever ambience was mid-play when this crashed shouldn't keep
+    // playing into the fallback/cooking/done phases that follow
+    ['pageturn-audio', 'reading-ambient-audio', 'recipe-narration-audio', 'relay-audio', 'stage123-ambient-audio']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.pause(); });
     revealDishImage(document.getElementById('dish-reveal'), 'fallback_cake.jpg');
   }
 
