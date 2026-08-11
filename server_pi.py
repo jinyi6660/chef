@@ -330,29 +330,61 @@ def extract_age_guess(chef1_line):
 def generate_dish_image_early(answers_text, age_guess):
     """Writes an imagePrompt for an actual birthday cake (not an abstract
     dish), topped with numeral candle(s) spelling out chef 1's age guess,
-    and generates the image. Kicked off right after chef 1's turn in the
-    relay (so the age guess exists yet), running in parallel with chefs 2
-    and 3 rather than waiting for the full relay to finish.
+    and generates the image via fal.ai. Kicked off right after chef 1's
+    turn in the relay (so the age guess exists yet), running in parallel
+    with chefs 2 and 3 rather than waiting for the full relay to finish.
 
-    Retries up to 3 times total on any failure (prompt call or image call)
-    before giving up — kitchen.html's stage4 loading loop waits on
-    hasImage becoming true, and a live show has one shot at this, so a
-    single transient API error shouldn't be allowed to leave the image
-    permanently missing."""
+    Uses fal.ai (Ideogram v3) rather than OpenAI's gpt-image-2 — OpenAI
+    needs org identity verification (can be pending/stuck for hours) and
+    even once verified takes ~40s+ per call, versus fal.ai's ~10-15s with
+    no such gate. Retries up to 3 times before giving up — kitchen.html's
+    stage4 loading loop waits on hasImage becoming true, and a live show
+    has one shot at this, so a single transient API error shouldn't be
+    allowed to leave the image permanently missing."""
+    image_prompt = _write_image_prompt(answers_text, age_guess)
+    if not image_prompt:
+        display_state["image"] = None
+        return
+    display_state["imagePrompt"] = image_prompt
     for attempt in range(3):
-        if _generate_dish_image_once(answers_text, age_guess):
+        if _generate_dish_image_via_fal(image_prompt):
             return
-    # OpenAI's gpt-image-2 needs org identity verification, which can be
-    # pending/stuck for hours — rather than let a live show sit on that,
-    # fall through to fal.ai (a different provider, no such verification
-    # gate) using the same image_prompt already written above.
-    print("[image-gen] all 3 OpenAI attempts failed — trying fal.ai as a second-layer fallback", flush=True)
-    if FAL_API_KEY:
-        for attempt in range(2):
-            if _generate_dish_image_via_fal(display_state.get("imagePrompt", "")):
-                return
-    print("[image-gen] fal.ai also failed or unavailable — giving up, hasImage will stay false", flush=True)
+    print("[image-gen] all 3 fal.ai attempts failed — giving up, hasImage will stay false", flush=True)
     display_state["image"] = None
+
+
+def _write_image_prompt(answers_text, age_guess):
+    """Claude call that writes the birthday-cake image prompt fed to the
+    image model. Returns the prompt text, or None on failure."""
+    try:
+        prompt_resp = client.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=300,
+            system=f"""You are a creative but unsettling pastry chef.
+
+Based on the guest's food-memory questionnaire answers, write ONE English visual description for an image model to depict a BIRTHDAY CAKE inspired by their answers.
+
+It must still read as an actual birthday cake, not an abstract object or a normal dessert.
+
+The cake is topped with numeral-shaped candle(s) spelling out the number {age_guess}. Use individual digit-shaped candles side by side if it is two digits. Each candle should be lit with a small flame, like a metallic birthday number candle. This number is a guess at the age tied to the guest's memory.
+
+Weave in one specific concrete detail lifted from the guest's own answers below, such as an object, colour, food, texture, place, or atmosphere they actually described. Transform this detail into the cake's decoration, filling, surface, candle, cream, or hidden layer.
+
+The cake should feel like a surreal birthday cake sculpture made from memory: layered sponge, thick cream, glossy icing, melted sugar, strawberries, cherries, sprinkles, dripping glaze, hollow spaces, unstable layers, or strange hidden fillings.
+
+Mood: uncanny, dreamlike, faintly unsettling, emotionally strange. The cake should feel edible but wrong, sweet but uncomfortable, celebratory but haunted by absence. Not cute, not elegant, not a clean bakery catalogue photo.
+
+Style: surreal studio photography, sculptural cake object, glossy cream and icing textures, artificial colours, soft dramatic lighting, slightly theatrical composition, isolated on a completely solid pure black studio background — no gradient, no pale or grey tones, the background must be flat black. The cake may look messy, melting, unstable, or over-decorated, but it must remain recognisable as a birthday cake.
+
+No text except the numeral candles. No people, no hands, no table setting, no logo, no watermark.
+
+Reply with ONLY the image prompt text, nothing else — no preamble, no quotation marks.""",
+            messages=[{"role": "user", "content": f"Guest questionnaire answers:\n{answers_text}"}],
+        )
+        return prompt_resp.content[0].text.strip()
+    except Exception as e:
+        print(f"[image-prompt-gen failed] {type(e).__name__}: {e}", flush=True)
+        return None
 
 
 def _generate_dish_image_via_fal(image_prompt):
@@ -385,70 +417,6 @@ def _generate_dish_image_via_fal(image_prompt):
         return True
     except Exception as e:
         print(f"[image-gen fal.ai attempt failed] {type(e).__name__}: {e}", flush=True)
-        return False
-
-
-def _generate_dish_image_once(answers_text, age_guess):
-    """One attempt at writing the image prompt and generating the image.
-    Returns True on success, False on any failure (caller retries)."""
-    try:
-        prompt_resp = client.messages.create(
-            model="claude-opus-4-6",
-            max_tokens=300,
-            system=f"""You are a creative but unsettling pastry chef.
-
-Based on the guest's food-memory questionnaire answers, write ONE English visual description for an image model to depict a BIRTHDAY CAKE inspired by their answers.
-
-It must still read as an actual birthday cake, not an abstract object or a normal dessert.
-
-The cake is topped with numeral-shaped candle(s) spelling out the number {age_guess}. Use individual digit-shaped candles side by side if it is two digits. Each candle should be lit with a small flame, like a metallic birthday number candle. This number is a guess at the age tied to the guest's memory.
-
-Weave in one specific concrete detail lifted from the guest's own answers below, such as an object, colour, food, texture, place, or atmosphere they actually described. Transform this detail into the cake's decoration, filling, surface, candle, cream, or hidden layer.
-
-The cake should feel like a surreal birthday cake sculpture made from memory: layered sponge, thick cream, glossy icing, melted sugar, strawberries, cherries, sprinkles, dripping glaze, hollow spaces, unstable layers, or strange hidden fillings.
-
-Mood: uncanny, dreamlike, faintly unsettling, emotionally strange. The cake should feel edible but wrong, sweet but uncomfortable, celebratory but haunted by absence. Not cute, not elegant, not a clean bakery catalogue photo.
-
-Style: surreal studio photography, sculptural cake object, glossy cream and icing textures, artificial colours, soft dramatic lighting, slightly theatrical composition, isolated on a completely solid pure black studio background — no gradient, no pale or grey tones, the background must be flat black. The cake may look messy, melting, unstable, or over-decorated, but it must remain recognisable as a birthday cake.
-
-No text except the numeral candles. No people, no hands, no table setting, no logo, no watermark.
-
-You will also be given reference images alongside this prompt: surreal birthday cakes, melting icing cakes, numeral candles, strange decorative cake sculptures, and classic birthday cake structures. Blend their candle shapes, glossy textures, eerie mood, and birthday cake structure into the final image.
-
-Reply with ONLY the image prompt text, nothing else — no preamble, no quotation marks.""",
-            messages=[{"role": "user", "content": f"Guest questionnaire answers:\n{answers_text}"}],
-        )
-        image_prompt = prompt_resp.content[0].text.strip()
-        display_state["imagePrompt"] = image_prompt
-
-        ref_files = [open(p, "rb") for p in REFERENCE_IMAGES if os.path.exists(p)]
-        try:
-            if ref_files:
-                image_result = openai_client.images.edit(
-                    model="gpt-image-2",
-                    image=ref_files,
-                    prompt=image_prompt,
-                    size="1024x1024",
-                    quality="medium",
-                )
-            else:
-                image_result = openai_client.images.generate(
-                    model="gpt-image-2",
-                    prompt=image_prompt,
-                    size="1024x1024",
-                    quality="medium",
-                )
-        finally:
-            for f in ref_files:
-                f.close()
-
-        display_state["image"] = image_result.data[0].b64_json
-        return True
-    except Exception as e:
-        # printed (not swallowed silently) so a real failure shows up in
-        # Render's log viewer instead of just quietly retrying 3 times and
-        # leaving the guest with no cake and no way to tell why
-        print(f"[image-gen attempt failed] {type(e).__name__}: {e}", flush=True)
         return False
 
 
