@@ -366,11 +366,56 @@ def generate_dish_image_early(answers_text, age_guess):
         display_state["image"] = None
         return
     display_state["imagePrompt"] = image_prompt
-    for attempt in range(3):
+    # fal.ai first — much faster (~10-15s) when it works, but has shown
+    # occasional unexplained failures (network/DNS blips reaching it from
+    # Render specifically). OpenAI is slower (~40s+) but its org
+    # verification is confirmed working now, so it's a solid second
+    # layer — same image_prompt (from the guest's own answers) and same
+    # REFERENCE_IMAGES get sent to whichever provider actually runs.
+    for attempt in range(2):
         if _generate_dish_image_via_fal(image_prompt):
             return
-    print("[image-gen] all 3 fal.ai attempts failed — giving up, hasImage will stay false", flush=True)
+    print("[image-gen] fal.ai failed — trying OpenAI as second-layer fallback", flush=True)
+    for attempt in range(2):
+        if _generate_dish_image_via_openai(image_prompt):
+            return
+    print("[image-gen] all attempts (fal.ai + OpenAI) failed — giving up, hasImage will stay false", flush=True)
     display_state["image"] = None
+
+
+def _generate_dish_image_via_openai(image_prompt):
+    """Second-layer fallback via OpenAI's gpt-image-2 — same image_prompt
+    (written from the guest's own answers by _write_image_prompt) and the
+    same REFERENCE_IMAGES the fal.ai call uses, so quality/faithfulness to
+    the guest's input doesn't change depending on which provider actually
+    ends up generating it. Wrapped in the same hard-timeout pattern as the
+    fal.ai calls, since a hung DNS lookup isn't specific to one provider.
+    Returns True on success, False on any failure."""
+    try:
+        ref_files = [open(p, "rb") for p in REFERENCE_IMAGES if os.path.exists(p)]
+        try:
+            if ref_files:
+                image_result = _call_with_hard_timeout(
+                    90, openai_client.images.edit,
+                    model="gpt-image-2", image=ref_files, prompt=image_prompt,
+                    size="1024x1024", quality="medium",
+                )
+            else:
+                image_result = _call_with_hard_timeout(
+                    90, openai_client.images.generate,
+                    model="gpt-image-2", prompt=image_prompt,
+                    size="1024x1024", quality="medium",
+                )
+        finally:
+            for f in ref_files:
+                f.close()
+        image_bytes = base64.b64decode(image_result.data[0].b64_json)
+        image_bytes = _force_pure_black_background(image_bytes)
+        display_state["image"] = base64.b64encode(image_bytes).decode("utf-8")
+        return True
+    except Exception as e:
+        print(f"[image-gen OpenAI attempt failed] {type(e).__name__}: {e}", flush=True)
+        return False
 
 
 def _write_image_prompt(answers_text, age_guess):
