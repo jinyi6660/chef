@@ -686,17 +686,31 @@ let vnReady = false;
 // this is the very first tap of the whole experience, so unlock
 // narration-audio here, synchronously, inside the real gesture.
 function primeNarrationAudio() {
-  const a = document.getElementById('narration-audio');
-  if (!a) return;
-  a.muted = true;
-  const p = a.play();
-  const finish = () => { a.pause(); a.currentTime = 0; a.muted = false; };
-  if (p && p.then) p.then(finish).catch(finish);
-  else finish();
+  return new Promise(resolve => {
+    const a = document.getElementById('narration-audio');
+    if (!a) { resolve(); return; }
+    // some iOS Safari versions don't count a *muted* programmatic play as
+    // a real "user activated this media element" event — near-silent
+    // volume instead of muted, and a short real playback (not paused the
+    // instant play() resolves) is the more reliable version of this trick
+    a.muted = false;
+    a.volume = 0.01;
+    const p = a.play();
+    const finish = () => { a.pause(); a.currentTime = 0; a.volume = 1; resolve(); };
+    if (p && p.then) {
+      p.then(() => setTimeout(finish, 60)).catch(finish);
+    } else {
+      finish();
+    }
+  });
 }
 
-function startVN() {
-  primeNarrationAudio();
+async function startVN() {
+  // priming and the real speak() call both use the *same* narration-audio
+  // element — without waiting for priming to fully finish (pause) first,
+  // the two play() calls raced each other on that element, and losing
+  // that race is exactly how a tap could end up producing no sound at all
+  await primeNarrationAudio();
   speechSynthesis && speechSynthesis.cancel();
   speak("Hello, welcome to this restaurant. I'll be your server today, jinyi. Please read our agreement carefully.");
   vnStep = 0; vnAnswers = {};
