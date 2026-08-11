@@ -633,6 +633,28 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText)
   captionWrap.classList.remove('on');
 }
 
+// sets the final dish image with a safety net: if the given src ever
+// fails to actually load (network blip, corrupt data URI, etc — #dish-reveal
+// is a plain <img>, so a failed load would otherwise just leave a black
+// box with a broken-image glyph, easily mistaken for "nothing happened"),
+// fall through to the pre-made fallback cake instead. If even THAT static
+// file fails, retry it once after a beat rather than giving up — it's a
+// real asset on this same server and should never sustainedly fail.
+function revealDishImage(reveal, src) {
+  reveal.onerror = () => {
+    if (!src.includes('fallback_cake.jpg')) {
+      console.warn('dish image failed to load — falling back to fallback_cake.jpg');
+      revealDishImage(reveal, 'fallback_cake.jpg');
+    } else {
+      console.warn('fallback_cake.jpg itself failed to load — retrying once');
+      reveal.onerror = null;
+      setTimeout(() => { reveal.src = 'fallback_cake.jpg?retry=' + Date.now(); }, 1000);
+    }
+  };
+  reveal.src = src;
+  reveal.classList.add('on');
+}
+
 async function playLoadingStage(videoSrc, isDone) {
   const video = document.getElementById('show-video');
   if (!AUDIO_ONLY) {
@@ -681,15 +703,14 @@ async function playLoadingStage(videoSrc, isDone) {
 
   const reveal = document.getElementById('dish-reveal');
   if (imageData) {
-    reveal.src = 'data:image/png;base64,' + imageData;
+    revealDishImage(reveal, 'data:image/png;base64,' + imageData);
   } else {
     // AI generation failed all 3 retries, or ran past the wait cap — a
     // live show can't end with nothing on screen, so fall back to a
     // pre-made cake image rather than looping back to idle empty-handed
     console.warn('no AI-generated image — falling back to fallback_cake.jpg');
-    reveal.src = 'fallback_cake.jpg';
+    revealDishImage(reveal, 'fallback_cake.jpg');
   }
-  reveal.classList.add('on');
 
   if (!AUDIO_ONLY) { video.classList.remove('on'); video.loop = false; video.pause(); }
 }
@@ -914,6 +935,15 @@ async function runShow(state) {
   _isIdleNow = false;
   document.getElementById('idle-dim').classList.remove('on'); // order submitted — fade the dim out
 
+  // everything from here through the cooking stages is wrapped in one big
+  // try/catch — a live audience should never be left staring at a frozen
+  // screen because of one unanticipated error (bad/missing server data,
+  // an API call none of the existing per-step timeouts covered, etc). Any
+  // crash mid-performance forces straight to the same guaranteed-safe
+  // fallback cake reveal that a failed image generation already falls
+  // back to, instead of hanging here silently with no explanation.
+  try {
+
   // 1 — AI waiter announces the order (back1.mp4 still sitting on its
   // standby frame from idle)
   setPhase('GREETING');
@@ -999,6 +1029,13 @@ async function runShow(state) {
   setPhase('COOKING');
   await postPhase('cooking');
   await playCookingStages();
+
+  } catch (err) {
+    console.error('runShow crashed mid-performance — forcing fallback cake reveal', err);
+    hideStage();
+    document.getElementById('show-video').classList.remove('on');
+    revealDishImage(document.getElementById('dish-reveal'), 'fallback_cake.jpg');
+  }
 
   // 5 — done; only now does the ordering screen's receipt unlock.
   setPhase('COMPLETE');
