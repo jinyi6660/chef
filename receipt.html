@@ -305,15 +305,32 @@ function showReceipt(state) {
 
   setStatus('DONE');
   show('s-receipt');
+  loadReceiptImage();
+}
 
-  fetch('/state/image').then(r => r.json()).then(d => {
-    if (d.image) {
-      const img = document.getElementById('rc-photo');
-      img.src = 'data:image/png;base64,' + d.image;
-      img.style.display = 'block';
-      document.querySelector('.rc-photo-ph').style.display = 'none';
-    }
-  }).catch(() => {});
+// kitchen.html gates its own reveal on hasImage becoming true, but it also
+// gives up after 100s and moves on regardless (showing its own local
+// fallback) — meaning by the time this page asks the server for the same
+// image, generation might still be genuinely in flight, or have failed
+// outright. A single fetch that just gives up on a null result left the
+// "rendering moment" placeholder stuck forever if that one attempt landed
+// before the image was ready. Retry for a while, then fall back to the
+// same static cake image kitchen.html itself would have shown.
+async function loadReceiptImage() {
+  const img = document.getElementById('rc-photo');
+  const ph = document.querySelector('.rc-photo-ph');
+  let imageData = null;
+  for (let i = 0; i < 15; i++) {
+    try {
+      const d = await fetch('/state/image').then(r => r.json());
+      if (d.image) { imageData = d.image; break; }
+    } catch {}
+    await sleep(1000);
+  }
+  img.onerror = () => { img.src = 'fallback_cake.jpg'; };
+  img.src = imageData ? ('data:image/png;base64,' + imageData) : 'fallback_cake.jpg';
+  img.style.display = 'block';
+  ph.style.display = 'none';
 }
 
 function finishOrder() {
