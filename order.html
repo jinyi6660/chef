@@ -916,7 +916,7 @@ function pollUntilDone() {
         setTimeout(returnToWelcome, 1800);
       }
     }).catch(() => {});
-  }, 700); // was 2000 — that much delay on every phase change read as badly out of sync
+  }, 400); // was 2000, then 700 — tightened again for less cross-page lag
 }
 
 function returnToWelcome() {

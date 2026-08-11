@@ -258,7 +258,7 @@ async function pollForOrder() {
       startReceiptFlow();
       return;
     }
-    await sleep(700);
+    await sleep(400);
   }
 }
 
@@ -277,7 +277,7 @@ function pollUntilDone() {
         setTimeout(() => showReceipt(data), 900);
       }
     }).catch(() => {});
-  }, 700); // was 2000 — matches order.html's tighter polling, less lag before the receipt updates
+  }, 400); // was 2000, then 700 — matches order.html's tighter polling, less lag before the receipt updates
 }
 
 // ── RECEIPT ──
