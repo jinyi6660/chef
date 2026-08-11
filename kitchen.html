@@ -427,15 +427,16 @@ function revealStage() {
     // straight past it instead of sitting on an empty page for a while
     mv.currentTime = 4;
     setTimeout(() => {
-      // the video's own usable content is only ~12s, but the narration is
-      // often 40s+ — stretching one pass to match used to need extreme
-      // slow-motion (computed rate landed near 0.25x), and video played
-      // that slow looks choppy/frozen rather than smooth, which read as
-      // the show "getting stuck". Loop it at a fixed, natural-ish pace
-      // instead and just stop it manually once the narration ends (see
-      // the wait loop further down) rather than timing one pass to match.
-      mv.loop = true;
-      mv.playbackRate = 0.7;
+      // one pass only, slowed down for a more deliberate reveal — once it
+      // reaches the end it just naturally holds on its last frame (a
+      // non-looping <video> stays there, doesn't go black), showing the
+      // complete text while the narration keeps reading. Looping it to
+      // keep pace with the ~40s+ narration was tried, but restarting the
+      // reveal partway through the narration looked like the text was
+      // resetting/breaking rather than just finishing early — holding on
+      // the finished page reads much better.
+      mv.loop = false;
+      mv.playbackRate = 0.5;
       mv.play().catch(() => {});
       narration.play().catch(() => {});
       revealBook(); // book fades in together with video+narration starting, not before
