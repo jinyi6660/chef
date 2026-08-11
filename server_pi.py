@@ -238,11 +238,22 @@ NARRATION_CACHE = {}
 
 
 def prewarm_narration_cache(lines):
-    for line in lines:
+    # every deploy wipes this cache (fresh process), and today's had many
+    # deploys — running these sequentially meant guests testing right
+    # after a push kept landing mid-warm-up, hitting slow/uncached lines.
+    # One thread per line so the whole set finishes in roughly the time
+    # of the single slowest call instead of their sum.
+    def warm_one(line):
         if line not in NARRATION_CACHE:
             audio = voice_tts(line)
             if audio:  # don't cache a transient failure — let it retry later
                 NARRATION_CACHE[line] = audio
+
+    threads = [threading.Thread(target=warm_one, args=(line,), daemon=True) for line in lines]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
 
 @app.route("/tts", methods=["POST"])
