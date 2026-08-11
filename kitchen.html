@@ -436,7 +436,7 @@ function revealStage() {
       // resetting/breaking rather than just finishing early — holding on
       // the finished page reads much better.
       mv.loop = false;
-      mv.playbackRate = 0.5;
+      mv.playbackRate = 0.35;
       mv.play().catch(() => {});
       narration.play().catch(() => {});
       revealBook(); // book fades in together with video+narration starting, not before
