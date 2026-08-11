@@ -750,15 +750,18 @@ async function playLoadingStage(videoSrc, isDone) {
 
 async function playCookingStages() {
   // relay runs before dish generation server-side, so lines should
-  // already be there by now — poll briefly just in case, but this is
-  // dead time on screen (book already hidden, first stage video not up
-  // yet) so keep it tight rather than the 5s this used to allow for
+  // already be there by now — poll briefly just in case. This is dead
+  // time on screen (book already hidden, first stage video not up yet),
+  // but today's other speedups (faster page-turn, faster reading phase)
+  // shortened the head start relay gets before this point, so err on the
+  // side of more patience here — missing the AI chefs' commentary
+  // entirely is worse than a few extra seconds of black screen.
   let lines = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 15; i++) {
     const d = await pollState();
     lines = (d && d.relayLines) || [];
     if (lines.length >= 3) break;
-    await sleep(300);
+    await sleep(400);
   }
   if (!lines.length) console.warn('playCookingStages: no relayLines yet in /state');
 
