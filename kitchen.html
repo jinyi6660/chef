@@ -456,29 +456,48 @@ async function pollState() {
   catch { return null; }
 }
 
-// ── HARD RELOAD ON FINISH ────────────────────────────────────
+// ── RELOAD ON FINISH (safety net only) ───────────────────────
 // server bumps resetSignal every time /reset is called (guest tapping
-// Finish on the receipt screen) — reload this screen entirely rather
-// than trying to softly reset every piece of in-memory JS state (stuck
-// timers, audio elements mid-playback, etc), giving every screen a truly
-// clean slate for the next guest.
+// Finish on the receipt screen). runShow() already waits for status to
+// go back to "idle" and then loops straight back into pollForOrder()
+// on its own (see the tail of runShow()) — no navigation involved, so
+// nothing here needs to force a reload on the normal path.
 //
-// plain location.reload() can still serve a cached copy of this page
-// (e.g. an older version from before a same-day code push) — force a
-// genuinely fresh fetch instead, like Ctrl+Shift+R, while preserving
-// any existing query string (?audio_only=1 must survive this reload on
-// the iPad's audio-only tab, or it'll silently go back to loading video).
+// that matters because a real navigation (location.href = ...) throws
+// away this tab's autoplay permission. Chrome mostly re-grants it
+// instantly from the origin's media-engagement history, but iOS Safari
+// does not — the iPad's kitchen.html?audio_only=1 tab never gets tapped
+// by anyone, so after a real reload its very next audio.play() (always
+// the greeting line, since that's the first sound of every show) gets
+// silently rejected by the browser and just... doesn't play. That's the
+// most likely explanation for "hey chef we got a new order" going
+// missing intermittently. So: only fall back to a real hardReload() if
+// the page hasn't already found its own way back to idle standby within
+// a generous grace window — i.e. treat it as a genuine stuck-state
+// recovery, not a routine per-order refresh.
 function hardReload() {
   const url = new URL(location.href);
   url.searchParams.set('_r', Date.now());
   location.href = url.toString();
 }
+let _isIdleNow = false; // flipped by pollForOrder()/runShow() as the show state machine moves
 let _knownResetSignal = null;
+let _resetSignalChangedAt = null;
+const RESET_STUCK_GRACE_MS = 15000;
 setInterval(async () => {
   const d = await pollState();
   if (!d || d.resetSignal === undefined) return;
   if (_knownResetSignal === null) { _knownResetSignal = d.resetSignal; return; }
-  if (d.resetSignal !== _knownResetSignal) hardReload();
+  if (d.resetSignal !== _knownResetSignal) {
+    if (_resetSignalChangedAt === null) _resetSignalChangedAt = Date.now();
+    if (_isIdleNow) {
+      // already back on its own — no reload needed, don't burn the audio unlock
+      _knownResetSignal = d.resetSignal;
+      _resetSignalChangedAt = null;
+    } else if (Date.now() - _resetSignalChangedAt > RESET_STUCK_GRACE_MS) {
+      hardReload();
+    }
+  }
 }, 3000);
 
 // tells the backend which beat of the performance we're on — the
@@ -870,6 +889,7 @@ async function pollForOrder() {
   hideStage();
   setIdle(true);
   setPhase('STANDBY');
+  _isIdleNow = true;
   // must finish (and fully release the shared #show-video element) before
   // polling starts — otherwise a fast-arriving order can call
   // playIdlePageTurn() while this is still mid-snapshot, and the two race
@@ -891,6 +911,7 @@ async function runShow(state) {
   resetDisplay();
   hideStage();
   setIdle(false);
+  _isIdleNow = false;
   document.getElementById('idle-dim').classList.remove('on'); // order submitted — fade the dim out
 
   // 1 — AI waiter announces the order (back1.mp4 still sitting on its
@@ -1006,6 +1027,7 @@ async function startDemo() {
   resetDisplay();
   hideStage();
   setIdle(false);
+  _isIdleNow = false;
   document.getElementById('idle-dim').classList.remove('on');
 
   // same standby-frame -> back1.mp4 -> reveal sequence as the real flow,
