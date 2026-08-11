@@ -452,19 +452,35 @@ def _force_pure_black_background(image_bytes):
     the "black" background itself. Flood-fill from the image's edges/
     corners instead — it only recolors the region that's actually
     connected to the border, so an enclosed dark patch inside the cake
-    (not touching any edge) is left alone no matter how dark it is."""
+    (not touching any edge) is left alone no matter how dark it is.
+
+    PIL's floodfill is a pure-Python, unbounded stack-based fill — on a
+    full 1024x1024 image with a large connected region it can take a very
+    long time (this genuinely hung a live request and, with only 8
+    gunicorn threads total, one stuck thread was enough to make the
+    entire site briefly unresponsive to everything else too). Run it on a
+    small thumbnail instead — a background region this large/simple is
+    identified just as well at low resolution — then scale the resulting
+    mask back up, so the fill work is always bounded regardless of the
+    source image's actual size."""
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        w, h = img.size
+        orig_size = img.size
+        thumb = img.resize((128, 128), Image.LANCZOS)
+        w, h = thumb.size
         seeds = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1),
                  (w // 2, 0), (0, h // 2), (w - 1, h // 2), (w // 2, h - 1)]
         for seed in seeds:
             try:
-                ImageDraw.floodfill(img, seed, (0, 0, 0), thresh=60)
+                ImageDraw.floodfill(thumb, seed, (0, 0, 0), thresh=60)
             except Exception:
                 pass
+        mask = thumb.convert("L").point(lambda p: 255 if p == 0 else 0)
+        mask = mask.resize(orig_size, Image.NEAREST)
+        black = Image.new("RGB", orig_size, (0, 0, 0))
+        result = Image.composite(black, img, mask)
         buf = io.BytesIO()
-        img.save(buf, format="PNG")
+        result.save(buf, format="PNG")
         return buf.getvalue()
     except Exception as e:
         print(f"[black-bg post-process failed, using original] {type(e).__name__}: {e}", flush=True)
