@@ -55,6 +55,7 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = "C5rrTayXl4m3QBraxgkY"  # cloned voice "jinyi"
+FAL_API_KEY = os.environ.get("FAL_KEY", "")  # second-layer image-gen fallback via fal.ai, used only if OpenAI's gpt-image-2 fails (e.g. org verification pending)
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
@@ -322,8 +323,50 @@ def generate_dish_image_early(answers_text, age_guess):
     for attempt in range(3):
         if _generate_dish_image_once(answers_text, age_guess):
             return
-    print("[image-gen] all 3 attempts failed — giving up, hasImage will stay false", flush=True)
+    # OpenAI's gpt-image-2 needs org identity verification, which can be
+    # pending/stuck for hours — rather than let a live show sit on that,
+    # fall through to fal.ai (a different provider, no such verification
+    # gate) using the same image_prompt already written above.
+    print("[image-gen] all 3 OpenAI attempts failed — trying fal.ai as a second-layer fallback", flush=True)
+    if FAL_API_KEY:
+        for attempt in range(2):
+            if _generate_dish_image_via_fal(display_state.get("imagePrompt", "")):
+                return
+    print("[image-gen] fal.ai also failed or unavailable — giving up, hasImage will stay false", flush=True)
     display_state["image"] = None
+
+
+def _generate_dish_image_via_fal(image_prompt):
+    """Fallback image generation via fal.ai, hosting Ideogram v3 — chosen
+    specifically because it's strong at rendering correct text/numerals,
+    which matters here since the cake's candles need to spell out an
+    actual number. Returns True on success, False on any failure."""
+    if not image_prompt:
+        return False
+    try:
+        resp = requests.post(
+            "https://fal.run/fal-ai/ideogram/v3",
+            headers={
+                "Authorization": f"Key {FAL_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "prompt": image_prompt,
+                "aspect_ratio": "1:1",
+                "rendering_speed": "BALANCED",
+                "num_images": 1,
+            },
+            timeout=60,
+        )
+        resp.raise_for_status()
+        image_url = resp.json()["images"][0]["url"]
+        img_resp = requests.get(image_url, timeout=30)
+        img_resp.raise_for_status()
+        display_state["image"] = base64.b64encode(img_resp.content).decode("utf-8")
+        return True
+    except Exception as e:
+        print(f"[image-gen fal.ai attempt failed] {type(e).__name__}: {e}", flush=True)
+        return False
 
 
 def _generate_dish_image_once(answers_text, age_guess):
