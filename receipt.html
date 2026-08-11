@@ -247,12 +247,27 @@ function show(id) {
 let lastSeenTs = null;
 let _pollTimer = null;
 
+// temporary on-screen debug readout — no DevTools needed, just look at
+// the corner of the screen (or screenshot it). Remove once the stuck-on-
+// processing issue is actually found.
+function _dbg(msg) {
+  let el = document.getElementById('dbg-overlay');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'dbg-overlay';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:rgba(0,0,0,0.85);color:#0f0;font:11px monospace;padding:6px 8px;white-space:pre-wrap;word-break:break-all;max-height:40vh;overflow:auto;';
+    document.body.appendChild(el);
+  }
+  el.textContent = new Date().toTimeString().slice(0,8) + ' ' + msg;
+}
+
 async function pollForOrder() {
   show('s-idle');
   setStatus('STANDBY');
   while (true) {
     let data;
-    try { data = await fetch('/state').then(r => r.json()); } catch { data = null; }
+    try { data = await fetch('/state').then(r => r.json()); } catch (e) { data = null; _dbg('pollForOrder fetch failed: ' + e); }
+    if (data) _dbg(`pollForOrder: status=${data.status} showPhase=${data.showPhase} ts=${data.ts} lastSeenTs=${lastSeenTs}`);
     if (data && data.ts && data.ts !== lastSeenTs && (data.status === 'cooking' || data.status === 'done')) {
       lastSeenTs = data.ts;
       startReceiptFlow();
@@ -272,11 +287,18 @@ function pollUntilDone() {
   clearInterval(_pollTimer);
   _pollTimer = setInterval(() => {
     fetch('/state').then(r => r.json()).then(data => {
+      _dbg(`pollUntilDone: showPhase=${data.showPhase}`);
       if (data.showPhase === 'done') {
         clearInterval(_pollTimer);
-        setTimeout(() => showReceipt(data), 900);
+        setTimeout(() => {
+          try {
+            showReceipt(data);
+          } catch (e) {
+            _dbg('showReceipt THREW: ' + e + '\n' + e.stack);
+          }
+        }, 900);
       }
-    }).catch(() => {});
+    }).catch(e => _dbg('pollUntilDone fetch failed: ' + e));
   }, 400); // was 2000, then 700 — matches order.html's tighter polling, less lag before the receipt updates
 }
 
