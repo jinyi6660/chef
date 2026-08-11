@@ -4,3 +4,4 @@ anthropic==0.105.2
 openai==2.40.0
 requests==2.32.3
 gunicorn==23.0.0
+Pillow==11.0.0

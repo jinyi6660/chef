@@ -10,7 +10,9 @@ import os
 import re
 import time
 import threading
+import io
 from urllib.parse import quote
+from PIL import Image, ImageDraw
 
 app = Flask(__name__)
 CORS(app)
@@ -433,11 +435,40 @@ def _generate_dish_image_via_fal(image_prompt):
         image_url = resp.json()["images"][0]["url"]
         img_resp = requests.get(image_url, timeout=30)
         img_resp.raise_for_status()
-        display_state["image"] = base64.b64encode(img_resp.content).decode("utf-8")
+        image_bytes = _force_pure_black_background(img_resp.content)
+        display_state["image"] = base64.b64encode(image_bytes).decode("utf-8")
         return True
     except Exception as e:
         print(f"[image-gen fal.ai attempt failed] {type(e).__name__}: {e}", flush=True)
         return False
+
+
+def _force_pure_black_background(image_bytes):
+    """Asking the model for a pure black background in the prompt only
+    gets a dark navy/charcoal in practice — not reliable enough to trust.
+    Post-process instead, but not with a flat brightness threshold: a
+    first attempt at that crushed some of the cake's own dark shadow
+    areas into black smudges, since some cakes' shadows were darker than
+    the "black" background itself. Flood-fill from the image's edges/
+    corners instead — it only recolors the region that's actually
+    connected to the border, so an enclosed dark patch inside the cake
+    (not touching any edge) is left alone no matter how dark it is."""
+    try:
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        w, h = img.size
+        seeds = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1),
+                 (w // 2, 0), (0, h // 2), (w - 1, h // 2), (w // 2, h - 1)]
+        for seed in seeds:
+            try:
+                ImageDraw.floodfill(img, seed, (0, 0, 0), thresh=60)
+            except Exception:
+                pass
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception as e:
+        print(f"[black-bg post-process failed, using original] {type(e).__name__}: {e}", flush=True)
+        return image_bytes
 
 
 PERSONAS = [
