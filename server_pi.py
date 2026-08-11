@@ -12,7 +12,23 @@ import time
 import threading
 import io
 from urllib.parse import quote
+from concurrent.futures import ThreadPoolExecutor
 from PIL import Image, ImageDraw
+
+# requests' own `timeout=` only bounds the connect/read phases — it does
+# NOT cover a hung DNS lookup, which is what fal.ai calls from Render's
+# network have been observed to do (a request with timeout=60 sat with
+# zero response, not even an error, for 80+ seconds). Route calls that
+# need a hard ceiling through this executor instead: run the blocking
+# call in a worker thread and give up waiting after N seconds regardless
+# — the orphaned thread eventually dies on its own, but nothing else is
+# ever blocked longer than the ceiling we set here.
+_HTTP_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+
+
+def _call_with_hard_timeout(timeout_sec, func, *args, **kwargs):
+    future = _HTTP_EXECUTOR.submit(func, *args, **kwargs)
+    return future.result(timeout=timeout_sec)
 
 app = Flask(__name__)
 CORS(app)
@@ -237,11 +253,12 @@ def fal_debug():
     if not FAL_API_KEY:
         return jsonify({"ok": False, "error": "FAL_KEY not set in this process's environment"})
     try:
-        resp = requests.post(
+        resp = _call_with_hard_timeout(
+            25, requests.post,
             "https://fal.run/fal-ai/ideogram/v3",
             headers={"Authorization": f"Key {FAL_API_KEY}", "Content-Type": "application/json"},
             json={"prompt": "a small red apple on a white background", "aspect_ratio": "1:1", "rendering_speed": "TURBO", "num_images": 1},
-            timeout=60,
+            timeout=20,
         )
         return jsonify({"ok": resp.ok, "status": resp.status_code, "body": resp.json()})
     except Exception as e:
@@ -422,18 +439,19 @@ def _generate_dish_image_via_fal(image_prompt):
         }
         if ref_urls:
             payload["image_urls"] = ref_urls
-        resp = requests.post(
+        resp = _call_with_hard_timeout(
+            25, requests.post,
             "https://fal.run/fal-ai/ideogram/v3",
             headers={
                 "Authorization": f"Key {FAL_API_KEY}",
                 "Content-Type": "application/json",
             },
             json=payload,
-            timeout=60,
+            timeout=20,
         )
         resp.raise_for_status()
         image_url = resp.json()["images"][0]["url"]
-        img_resp = requests.get(image_url, timeout=30)
+        img_resp = _call_with_hard_timeout(15, requests.get, image_url, timeout=10)
         img_resp.raise_for_status()
         image_bytes = _force_pure_black_background(img_resp.content)
         display_state["image"] = base64.b64encode(image_bytes).decode("utf-8")
