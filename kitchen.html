@@ -222,6 +222,12 @@
     width: 94%; height: 94%;
     object-fit: contain; z-index: 810; background: #000;
     opacity: 0; pointer-events: none; transition: opacity 0.8s ease;
+    /* the AI-generated background is asked for pure black in the prompt
+       but in practice lands on a dark navy/charcoal, not true #000 — this
+       crushes dark tones further toward black (without meaningfully
+       touching the much brighter cake itself) so it blends into the
+       actual #000 stage around it instead of showing a visible seam */
+    filter: brightness(0.88) contrast(1.4);
   }
   #dish-reveal.on { opacity: 1; }
 
