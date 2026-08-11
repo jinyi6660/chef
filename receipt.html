@@ -284,10 +284,15 @@ function startReceiptFlow() {
   pollUntilDone();
 }
 
+let _pollActive = false;
+let _lastPollAttemptAt = 0;
+
 function _checkDoneOnce() {
+  _lastPollAttemptAt = Date.now();
   fetch('/state').then(r => r.json()).then(data => {
     _dbg(`pollUntilDone: showPhase=${data.showPhase}`);
     if (data.showPhase === 'done') {
+      _pollActive = false;
       clearInterval(_pollTimer);
       setTimeout(() => {
         try {
@@ -302,6 +307,8 @@ function _checkDoneOnce() {
 
 function pollUntilDone() {
   clearInterval(_pollTimer);
+  _pollActive = true;
+  _checkDoneOnce();
   _pollTimer = setInterval(_checkDoneOnce, 400); // was 2000, then 700 — matches order.html's tighter polling, less lag before the receipt updates
 }
 
@@ -313,11 +320,25 @@ function pollUntilDone() {
 // immediately instead of waiting for the next (possibly long-delayed)
 // interval tick.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && _pollTimer !== null) {
+  if (document.visibilityState === 'visible' && _pollActive) {
     _dbg('tab became visible again — checking immediately');
     _checkDoneOnce();
   }
 });
+
+// watchdog — independent of the interval above, in case THAT stops
+// firing on its own for a reason that isn't tab-backgrounding (seen live:
+// the interval went completely silent while the tab was actually in the
+// foreground the whole time, not explained by the visibility case above).
+// If we're supposed to be actively polling but nothing has actually
+// attempted a check in a while, something died — tear down whatever's
+// left of the old interval and start a fresh one from scratch.
+setInterval(() => {
+  if (_pollActive && Date.now() - _lastPollAttemptAt > 2500) {
+    _dbg('watchdog: polling stalled, restarting it');
+    pollUntilDone();
+  }
+}, 1000);
 
 // ── RECEIPT ──
 function esc(s) {
