@@ -265,6 +265,23 @@ def fal_debug():
         return jsonify({"ok": False, "error_type": type(e).__name__, "error": str(e)})
 
 
+@app.route("/thread-debug", methods=["GET"])
+def thread_debug():
+    """Diagnostic route — the whole site (even a plain /state read) was
+    observed responding in 3-9s instead of instantly, well after any
+    order finished generating, suggesting something is still occupying
+    the process in the background. Reports live thread counts and the
+    hard-timeout executor's queue so a stuck/leaked background call can
+    actually be seen instead of guessed at."""
+    threads = threading.enumerate()
+    return jsonify({
+        "active_thread_count": len(threads),
+        "thread_names": [t.name for t in threads],
+        "http_executor_queue_size": _HTTP_EXECUTOR._work_queue.qsize(),
+        "http_executor_max_workers": _HTTP_EXECUTOR._max_workers,
+    })
+
+
 def voice_tts(text, fallback_voice="onyx"):
     """Cloned voice first, falls back to OpenAI TTS if ElevenLabs is
     unavailable (missing key, quota, or network failure) so a live show
