@@ -435,7 +435,7 @@ function revealStage() {
       // instead and just stop it manually once the narration ends (see
       // the wait loop further down) rather than timing one pass to match.
       mv.loop = true;
-      mv.playbackRate = 0.85;
+      mv.playbackRate = 0.7;
       mv.play().catch(() => {});
       narration.play().catch(() => {});
       revealBook(); // book fades in together with video+narration starting, not before
