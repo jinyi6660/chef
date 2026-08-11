@@ -404,6 +404,19 @@ function revealStage() {
     document.getElementById('bg').classList.add('revealed');
     document.getElementById('book').classList.add('revealed');
   };
+  // this page should only ever have the narration voice on it, and the
+  // text-overlay video should move in step with that voice — not two
+  // independent things that happen to overlap. Narration always stays at
+  // its natural, un-sped-up pace (speeding it up was tried before and
+  // made it sound rushed — explicit feedback was to never do that again);
+  // instead the VIDEO's rate is stretched/compressed to match the
+  // narration's actual length, the same technique playSyncedStage() below
+  // already uses for the cooking-stage videos.
+  const narration = document.getElementById('recipe-narration-audio');
+  narration.pause();
+  narration.currentTime = 0;
+  narration.playbackRate = 1;
+
   if (!AUDIO_ONLY) {
     const mv = document.getElementById('method-video');
     mv.pause();
@@ -411,27 +424,23 @@ function revealStage() {
     // any text actually appears (confirmed by sampling frames) — skip
     // straight past it instead of sitting on an empty page for a while
     mv.currentTime = 4;
-    mv.playbackRate = 0.75;
-    setTimeout(() => {
+    setTimeout(async () => {
+      await new Promise(resolve => {
+        if (narration.readyState >= 1) return resolve();
+        narration.addEventListener('loadedmetadata', resolve, { once: true });
+        setTimeout(resolve, 1000);
+      });
+      const videoRemaining = (mv.duration && isFinite(mv.duration)) ? (mv.duration - 4) : 12;
+      const narrationDuration = (narration.duration && isFinite(narration.duration)) ? narration.duration : videoRemaining;
+      mv.playbackRate = Math.max(0.25, Math.min(4, videoRemaining / narrationDuration));
       mv.play().catch(() => {});
-      revealBook(); // book fades in together with the text starting, not before
+      narration.play().catch(() => {});
+      revealBook(); // book fades in together with video+narration starting, not before
     }, 1200);
   } else {
     revealBook();
+    setTimeout(() => { narration.play().catch(() => {}); }, 1200);
   }
-  // recipe narration starts a beat after the text-overlay video itself
-  // (it was landing before the on-screen text actually appeared) — at
-  // its own natural pace (speeding it up to match the video's ~32s
-  // length made it sound rushed). runShow() below holds the reading page
-  // open until this finishes too, not just the video, so nothing gets
-  // cut off even though the narration outlasts one pass of the
-  // (non-looping) video.
-  setTimeout(() => {
-    const narration = document.getElementById('recipe-narration-audio');
-    narration.playbackRate = 1;
-    narration.currentTime = 0;
-    narration.play().catch(() => {});
-  }, 3200);
 }
 
 // ── INGREDIENT TAGS ──────────────────────────────────────────
