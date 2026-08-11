@@ -521,11 +521,18 @@ def _force_pure_black_background(image_bytes):
     small thumbnail instead — a background region this large/simple is
     identified just as well at low resolution — then scale the resulting
     mask back up, so the fill work is always bounded regardless of the
-    source image's actual size."""
+    source image's actual size.
+
+    First version of this used a 128px thumbnail and NEAREST-neighbor to
+    scale the mask back up — fast, but the edge around the cake came out
+    visibly blocky/pixelated (each thumbnail pixel became an 8x8 hard
+    square at full size). 384px + LANCZOS resampling for the upscale
+    keeps this comfortably fast (still ~7x fewer pixels than the source)
+    while giving a smooth, anti-aliased edge instead of a jagged one."""
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         orig_size = img.size
-        thumb = img.resize((128, 128), Image.LANCZOS)
+        thumb = img.resize((384, 384), Image.LANCZOS)
         w, h = thumb.size
         seeds = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1),
                  (w // 2, 0), (0, h // 2), (w - 1, h // 2), (w // 2, h - 1)]
@@ -535,7 +542,7 @@ def _force_pure_black_background(image_bytes):
             except Exception:
                 pass
         mask = thumb.convert("L").point(lambda p: 255 if p == 0 else 0)
-        mask = mask.resize(orig_size, Image.NEAREST)
+        mask = mask.resize(orig_size, Image.LANCZOS)
         black = Image.new("RGB", orig_size, (0, 0, 0))
         result = Image.composite(black, img, mask)
         buf = io.BytesIO()
