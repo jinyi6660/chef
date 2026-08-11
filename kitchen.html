@@ -974,17 +974,11 @@ async function runShow(state) {
   // now reveal the paper book — prompts + guest's input appear on it
   revealStage();
 
-  // soft page-rustle ambience under the whole reading phase — its own
-  // ~30s length roughly matches MIN_READING_MS below, so it plays through
-  // once rather than looping
-  const readingAmbient = document.getElementById('reading-ambient-audio');
-  readingAmbient.volume = 0.12;
-  readingAmbient.currentTime = 0;
-  readingAmbient.play().catch(() => {});
-
-  // the recipe/method text read aloud in the cloned voice, under the
-  // ambience above — actually started inside revealStage() itself, timed
-  // to the exact same beat as the text-overlay video so they stay synced
+  // the recipe/method text read aloud in the cloned voice — this is now
+  // the only sound on this page (the soft page-rustle ambience that used
+  // to play underneath it was removed on request). Actually started
+  // inside revealStage() itself, timed to the exact same beat as the
+  // text-overlay video so they stay synced.
   const recipeNarration = document.getElementById('recipe-narration-audio');
   recipeNarration.volume = 0.8;
 
@@ -1046,7 +1040,6 @@ async function runShow(state) {
       setTimeout(resolve, 20000); // safety cap if playback ever stalls
     });
   }
-  readingAmbient.pause();
   recipeNarration.pause();
   hideStage(); // book fades out for real, not just covered by the opaque video on top of it
   setPhase('COOKING');
