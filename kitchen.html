@@ -426,15 +426,16 @@ function revealStage() {
     // any text actually appears (confirmed by sampling frames) — skip
     // straight past it instead of sitting on an empty page for a while
     mv.currentTime = 4;
-    setTimeout(async () => {
-      await new Promise(resolve => {
-        if (narration.readyState >= 1) return resolve();
-        narration.addEventListener('loadedmetadata', resolve, { once: true });
-        setTimeout(resolve, 1000);
-      });
-      const videoRemaining = (mv.duration && isFinite(mv.duration)) ? (mv.duration - 4) : 12;
-      const narrationDuration = (narration.duration && isFinite(narration.duration)) ? narration.duration : videoRemaining;
-      mv.playbackRate = Math.max(0.25, Math.min(4, videoRemaining / narrationDuration));
+    setTimeout(() => {
+      // the video's own usable content is only ~12s, but the narration is
+      // often 40s+ — stretching one pass to match used to need extreme
+      // slow-motion (computed rate landed near 0.25x), and video played
+      // that slow looks choppy/frozen rather than smooth, which read as
+      // the show "getting stuck". Loop it at a fixed, natural-ish pace
+      // instead and just stop it manually once the narration ends (see
+      // the wait loop further down) rather than timing one pass to match.
+      mv.loop = true;
+      mv.playbackRate = 0.85;
       mv.play().catch(() => {});
       narration.play().catch(() => {});
       revealBook(); // book fades in together with video+narration starting, not before
@@ -745,13 +746,15 @@ async function playLoadingStage(videoSrc, isDone) {
 
 async function playCookingStages() {
   // relay runs before dish generation server-side, so lines should
-  // already be there by now — poll briefly just in case
+  // already be there by now — poll briefly just in case, but this is
+  // dead time on screen (book already hidden, first stage video not up
+  // yet) so keep it tight rather than the 5s this used to allow for
   let lines = [];
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 6; i++) {
     const d = await pollState();
     lines = (d && d.relayLines) || [];
     if (lines.length >= 3) break;
-    await sleep(500);
+    await sleep(300);
   }
   if (!lines.length) console.warn('playCookingStages: no relayLines yet in /state');
 
@@ -1026,36 +1029,25 @@ async function runShow(state) {
   const readingElapsed = Date.now() - readingStart;
   if (readingElapsed < MIN_READING_MS) await sleep(MIN_READING_MS - readingElapsed);
 
-  // 4 — once the method text video itself has finished playing, follow
-  // it with 合成3 in full (no cutting it short, no looping/conditions).
-  // The narration plays at natural (unsped-up) pace and is usually
-  // longer than the video's one pass, so also hold here until it's
-  // actually finished talking — otherwise it would get cut off mid-line
-  // the moment the (shorter, silent) video ends.
-  // In AUDIO_ONLY mode there's no video at all — mv.ended would stay
-  // false forever with no 'ended' event ever coming, hanging this
-  // permanently, so skip straight to the narration wait below instead.
-  if (!AUDIO_ONLY) {
-    const mv = document.getElementById('method-video');
-    if (!mv.ended) {
-      // unlike every other video wait in this file, this one had no
-      // 'error' listener and no timeout fallback — a real network blip
-      // or codec hiccup on the actual kitchen display would hang the
-      // entire show here forever with no recovery
-      await new Promise(resolve => {
-        mv.addEventListener('ended', resolve, { once: true });
-        mv.addEventListener('error', resolve, { once: true });
-        setTimeout(resolve, 45000);
-      });
-    }
-  }
+  // 4 — the method-video now loops continuously (see revealStage()) so
+  // it never fires 'ended' on its own — the narration is what actually
+  // paces this beat. Hold here until it's actually finished talking,
+  // then explicitly stop the looping video ourselves.
   if (!recipeNarration.ended && !recipeNarration.paused) {
     await new Promise(resolve => {
       recipeNarration.addEventListener('ended', resolve, { once: true });
-      setTimeout(resolve, 20000); // safety cap if playback ever stalls
+      // recipe_narration.mp3 itself runs ~47s — this cap only exists for
+      // a genuinely stalled playback, so it needs real headroom above
+      // that, not a number shorter than the file itself
+      setTimeout(resolve, 65000);
     });
   }
   recipeNarration.pause();
+  if (!AUDIO_ONLY) {
+    const mv = document.getElementById('method-video');
+    mv.loop = false;
+    mv.pause();
+  }
   hideStage(); // book fades out for real, not just covered by the opaque video on top of it
   setPhase('COOKING');
   await postPhase('cooking');
