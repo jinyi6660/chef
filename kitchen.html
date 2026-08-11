@@ -388,14 +388,16 @@ function hideStage() {
   document.getElementById('book').classList.remove('revealed');
 }
 function revealStage() {
-  document.getElementById('bg').classList.add('revealed');
-  document.getElementById('book').classList.add('revealed');
-  // method-video has `autoplay`, so it's been playing since page load —
-  // pause + rewind it now, and only actually start it once the book's own
-  // 1.2s opacity fade-in (see #bg, #book CSS transition) has finished.
-  // Starting it immediately meant the text animation was already a beat
-  // into playing while still invisible during the fade, so by the time
-  // the page was actually visible it looked like it was lagging to catch up.
+  // book/bg reveal itself is now held back until the text-overlay video is
+  // about to actually start (see setTimeout below) instead of firing
+  // immediately — revealing the book first meant the guest saw a few
+  // seconds of the blank/empty recipe book before any text appeared on
+  // it, which read as its own separate "empty book" beat rather than one
+  // cohesive reveal.
+  const revealBook = () => {
+    document.getElementById('bg').classList.add('revealed');
+    document.getElementById('book').classList.add('revealed');
+  };
   if (!AUDIO_ONLY) {
     const mv = document.getElementById('method-video');
     mv.pause();
@@ -406,7 +408,10 @@ function revealStage() {
     mv.playbackRate = 0.5;
     setTimeout(() => {
       mv.play().catch(() => {});
+      revealBook(); // book fades in together with the text starting, not before
     }, 1200);
+  } else {
+    revealBook();
   }
   // recipe narration starts a beat after the text-overlay video itself
   // (it was landing before the on-screen text actually appeared) — at
@@ -948,6 +953,8 @@ async function runShow(state) {
   // standby frame from idle)
   setPhase('GREETING');
   await postPhase('greeting');
+  const GREETING_DELAY_MS = 3000; // line used to fire the instant the order landed — hold it a beat first
+  await sleep(GREETING_DELAY_MS);
   await playGreetingAudio();
 
   // 2 — back1.mp4 now plays through from the start (was paused at idle)
