@@ -405,7 +405,7 @@ function revealStage() {
     // any text actually appears (confirmed by sampling frames) — skip
     // straight past it instead of sitting on an empty page for a while
     mv.currentTime = 4;
-    mv.playbackRate = 0.5;
+    mv.playbackRate = 0.75;
     setTimeout(() => {
       mv.play().catch(() => {});
       revealBook(); // book fades in together with the text starting, not before
