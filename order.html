@@ -410,6 +410,14 @@
 // than trying to softly reset every piece of in-memory JS state (stuck
 // timers, audio elements mid-playback, etc), giving every screen a truly
 // clean slate for the next guest.
+//
+// plain location.reload() can still serve a cached copy of this page —
+// force a genuinely fresh fetch instead, like Ctrl+Shift+R.
+function hardReload() {
+  const url = new URL(location.href);
+  url.searchParams.set('_r', Date.now());
+  location.href = url.toString();
+}
 let _knownResetSignal = null;
 setInterval(async () => {
   try {
@@ -418,7 +426,7 @@ setInterval(async () => {
     const d = await r.json();
     if (d.resetSignal === undefined) return;
     if (_knownResetSignal === null) { _knownResetSignal = d.resetSignal; return; }
-    if (d.resetSignal !== _knownResetSignal) location.reload();
+    if (d.resetSignal !== _knownResetSignal) hardReload();
   } catch {}
 }, 3000);
 

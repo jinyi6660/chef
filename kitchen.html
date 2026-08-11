@@ -462,12 +462,23 @@ async function pollState() {
 // than trying to softly reset every piece of in-memory JS state (stuck
 // timers, audio elements mid-playback, etc), giving every screen a truly
 // clean slate for the next guest.
+//
+// plain location.reload() can still serve a cached copy of this page
+// (e.g. an older version from before a same-day code push) — force a
+// genuinely fresh fetch instead, like Ctrl+Shift+R, while preserving
+// any existing query string (?audio_only=1 must survive this reload on
+// the iPad's audio-only tab, or it'll silently go back to loading video).
+function hardReload() {
+  const url = new URL(location.href);
+  url.searchParams.set('_r', Date.now());
+  location.href = url.toString();
+}
 let _knownResetSignal = null;
 setInterval(async () => {
   const d = await pollState();
   if (!d || d.resetSignal === undefined) return;
   if (_knownResetSignal === null) { _knownResetSignal = d.resetSignal; return; }
-  if (d.resetSignal !== _knownResetSignal) location.reload();
+  if (d.resetSignal !== _knownResetSignal) hardReload();
 }, 3000);
 
 // tells the backend which beat of the performance we're on — the

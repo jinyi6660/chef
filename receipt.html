@@ -202,6 +202,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // screen's own Finish button) — reload this screen entirely rather than
 // relying only on finishOrder()'s manual soft-reset, so a stray stuck
 // timer/audio element can never carry over to the next guest.
+//
+// plain location.reload() can still serve a cached copy of this page —
+// force a genuinely fresh fetch instead, like Ctrl+Shift+R.
+function hardReload() {
+  const url = new URL(location.href);
+  url.searchParams.set('_r', Date.now());
+  location.href = url.toString();
+}
 let _knownResetSignal = null;
 setInterval(async () => {
   try {
@@ -210,7 +218,7 @@ setInterval(async () => {
     const d = await r.json();
     if (d.resetSignal === undefined) return;
     if (_knownResetSignal === null) { _knownResetSignal = d.resetSignal; return; }
-    if (d.resetSignal !== _knownResetSignal) location.reload();
+    if (d.resetSignal !== _knownResetSignal) hardReload();
   } catch {}
 }, 3000);
 
