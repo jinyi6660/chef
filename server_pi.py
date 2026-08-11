@@ -10,6 +10,7 @@ import os
 import re
 import time
 import threading
+from urllib.parse import quote
 
 app = Flask(__name__)
 CORS(app)
@@ -376,6 +377,8 @@ Mood: uncanny, dreamlike, faintly unsettling, emotionally strange. The cake shou
 
 Style: surreal studio photography, sculptural cake object, glossy cream and icing textures, artificial colours, soft dramatic lighting, slightly theatrical composition, isolated on a completely solid pure black studio background — no gradient, no pale or grey tones, the background must be flat black. The cake may look messy, melting, unstable, or over-decorated, but it must remain recognisable as a birthday cake.
 
+The background MUST be pure solid black (#000000), completely flat, no gradient, no vignette, no visible studio floor or backdrop seam, no colour cast — just flat black behind the cake. This is a hard requirement, restate it explicitly at the end of your description.
+
 No text except the numeral candles. No people, no hands, no table setting, no logo, no watermark.
 
 Reply with ONLY the image prompt text, nothing else — no preamble, no quotation marks.""",
@@ -387,26 +390,43 @@ Reply with ONLY the image prompt text, nothing else — no preamble, no quotatio
         return None
 
 
+SITE_BASE_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://chef-2754.onrender.com")
+
+
 def _generate_dish_image_via_fal(image_prompt):
     """Fallback image generation via fal.ai, hosting Ideogram v3 — chosen
     specifically because it's strong at rendering correct text/numerals,
     which matters here since the cake's candles need to spell out an
-    actual number. Returns True on success, False on any failure."""
+    actual number. Returns True on success, False on any failure.
+
+    Passes the same reference images the old OpenAI edit-endpoint call
+    used to (REFERENCE_IMAGES) as style references — Ideogram v3's
+    image_urls param wants URLs it can fetch, not raw file uploads, so
+    these point back at this same server's own static-file route rather
+    than uploading the files anywhere."""
     if not image_prompt:
         return False
     try:
+        ref_urls = [
+            f"{SITE_BASE_URL}/{quote(os.path.basename(p))}"
+            for p in REFERENCE_IMAGES if os.path.exists(p)
+        ]
+        payload = {
+            "prompt": image_prompt,
+            "aspect_ratio": "1:1",
+            "rendering_speed": "BALANCED",
+            "num_images": 1,
+            "negative_prompt": "colored background, white background, grey background, gray background, gradient background, patterned background, textured background, studio floor, visible backdrop seam, vignette",
+        }
+        if ref_urls:
+            payload["image_urls"] = ref_urls
         resp = requests.post(
             "https://fal.run/fal-ai/ideogram/v3",
             headers={
                 "Authorization": f"Key {FAL_API_KEY}",
                 "Content-Type": "application/json",
             },
-            json={
-                "prompt": image_prompt,
-                "aspect_ratio": "1:1",
-                "rendering_speed": "BALANCED",
-                "num_images": 1,
-            },
+            json=payload,
             timeout=60,
         )
         resp.raise_for_status()
