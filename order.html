@@ -12,6 +12,7 @@
 <link rel="preload" as="image" href="DIA.png">
 <link rel="preload" as="image" href="second.png">
 <link rel="preload" as="image" href="cake.jpg">
+<link rel="preload" as="audio" href="line_intro.mp3">
 <style>
   :root {
     --g:   #6b9fff;
@@ -452,6 +453,33 @@ if (window.speechSynthesis) {
   speechSynthesis.onvoiceschanged = loadV;
   loadV();
 }
+// these lines are fixed UI copy (never depend on the guest's answers), so
+// there's no reason to round-trip them through /tts + NARRATION_CACHE at
+// all — that cache lives in server memory and gets wiped on every deploy,
+// which meant the first guest to hit these lines after any redeploy got
+// silence or a several-second wait while ElevenLabs/OpenAI regenerated
+// them from scratch. Pre-rendered once and committed as static files
+// instead — same cloned voice, but truly instant and immune to redeploys.
+const STATIC_NARRATION = {
+  "Hello, welcome to this restaurant. I'll be your server today, jinyi. Please read our agreement carefully.": "line_intro.mp3",
+  "Today, our special menu is birthday cake — baked for you by three chefs, together.": "line_special.mp3",
+  "Do you usually eat cake on your birthday?": "line_q1.mp3",
+  "What flavour was the most memorable cake in your memory?": "line_q2.mp3",
+  "What did it look like?": "line_q3.mp3",
+  "Who did you eat it with, and where?": "line_q4.mp3",
+  "Your memory file has been received.  The chef will now begin.": "line_received.mp3",
+  "That's all? Thank you for your order — please don't take off your headphones.": "line_ordersent.mp3",
+};
+function playStaticNarration(src) {
+  return new Promise(resolve => {
+    const audio = document.getElementById('narration-audio');
+    audio.onerror = null;
+    audio.src = src;
+    audio.addEventListener('ended', resolve, { once: true });
+    audio.play().catch(resolve);
+    setTimeout(resolve, 15000);
+  });
+}
 const _narrationCache = {};
 function prefetchNarration(text) {
   const cleanText = text.replace(/\n/g, ' ');
@@ -475,6 +503,7 @@ function prefetchNarration(text) {
 function speak(text) {
   const cleanText = text.replace(/\n/g, ' ');
   if (window.speechSynthesis) speechSynthesis.cancel();
+  if (STATIC_NARRATION[cleanText]) return playStaticNarration(STATIC_NARRATION[cleanText]);
   return prefetchNarration(cleanText).then(audio => {
     return audio ? playClonedVoice(audio) : speakFallback(cleanText);
   });
