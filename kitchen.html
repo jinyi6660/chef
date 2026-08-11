@@ -1013,12 +1013,17 @@ async function runShow(state) {
   setPhase('READING');
   await postPhase('reading');
   // the reading phase has a 30s+ floor either way (MIN_READING_MS below),
-  // so there's always time to warm the browser's cache for the first
-  // cooking-stage video here — without this, the moment the book faded
-  // out and stage1.mp4's src was set for the first time, the browser had
-  // to start its fetch from scratch, leaving a beat of blank video before
-  // any frame was actually decoded.
-  if (!AUDIO_ONLY) fetch(STAGE_VIDEOS[0]).catch(() => {});
+  // so there's always time to warm the browser's cache for every
+  // upcoming cooking-stage video (including the stage4 loading/reveal
+  // video) here — without this, the moment each one's src was set for
+  // the first time, the browser had to start that fetch from scratch,
+  // leaving a beat of blank video before any frame was actually decoded.
+  // stage1.mp4 mattered most (fixed first), but the same gap existed at
+  // every later transition too, including right before the final cake
+  // reveal.
+  if (!AUDIO_ONLY) {
+    [...STAGE_VIDEOS, LOADING_VIDEO].forEach(src => fetch(src).catch(() => {}));
+  }
   const readingStart = Date.now();
   let cur = state;
   // the backend now always falls back to plain-word tags on its own AI
