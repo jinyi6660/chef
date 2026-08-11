@@ -776,6 +776,12 @@ async function playCookingStages() {
   try { await ambient.play(); } catch {}
 
   for (let i = 0; i < STAGE_VIDEOS.length; i++) {
+    // stagger-prefetch whatever plays next, one at a time, instead of all
+    // four stage videos competing for bandwidth at once — each stage has
+    // its own line's audio duration (often 10s+) to let this finish
+    // quietly in the background before it's actually needed.
+    const next = STAGE_VIDEOS[i + 1] || LOADING_VIDEO;
+    if (!AUDIO_ONLY && next) fetch(next).catch(() => {});
     const line = lines[i];
     await playSyncedStage(STAGE_VIDEOS[i], STAGE_DURATIONS[i], line && line.audio, line && line.text);
   }
@@ -1012,18 +1018,20 @@ async function runShow(state) {
   // already); left page grows the guest's own extracted words on the plate
   setPhase('READING');
   await postPhase('reading');
-  // the reading phase has a 30s+ floor either way (MIN_READING_MS below),
-  // so there's always time to warm the browser's cache for every
-  // upcoming cooking-stage video (including the stage4 loading/reveal
-  // video) here — without this, the moment each one's src was set for
-  // the first time, the browser had to start that fetch from scratch,
-  // leaving a beat of blank video before any frame was actually decoded.
-  // stage1.mp4 mattered most (fixed first), but the same gap existed at
-  // every later transition too, including right before the final cake
-  // reveal.
-  if (!AUDIO_ONLY) {
-    [...STAGE_VIDEOS, LOADING_VIDEO].forEach(src => fetch(src).catch(() => {}));
-  }
+  // warm the browser's cache for the very next cooking-stage video here —
+  // without this, the moment stage1.mp4's src was set for the first time,
+  // the browser had to start that fetch from scratch, leaving a beat of
+  // blank video before any frame was actually decoded.
+  //
+  // this used to also prefetch stage22/stage33/stage44 (the LOADING_VIDEO)
+  // all at the same time, right here — but that meant 4 video downloads
+  // competing for bandwidth at the exact moment the recipe narration also
+  // needed to load, and on a constrained connection that starved the
+  // narration for a good ~30s of silence before it could actually start
+  // playing. Only prefetch the one thing that's actually needed next;
+  // the later stage videos get prefetched individually, staggered, once
+  // the cooking stages actually begin (see playCookingStages()).
+  if (!AUDIO_ONLY) fetch(STAGE_VIDEOS[0]).catch(() => {});
   const readingStart = Date.now();
   let cur = state;
   // the backend now always falls back to plain-word tags on its own AI
