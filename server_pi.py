@@ -226,6 +226,25 @@ def image_debug():
         return jsonify({"ok": False, "error_type": type(e).__name__, "error": str(e)})
 
 
+@app.route("/fal-debug", methods=["GET"])
+def fal_debug():
+    """Same idea as /image-debug but for the fal.ai fallback — confirms
+    FAL_KEY actually made it into Render's environment and that this
+    process can reach fal.ai, without touching display_state."""
+    if not FAL_API_KEY:
+        return jsonify({"ok": False, "error": "FAL_KEY not set in this process's environment"})
+    try:
+        resp = requests.post(
+            "https://fal.run/fal-ai/ideogram/v3",
+            headers={"Authorization": f"Key {FAL_API_KEY}", "Content-Type": "application/json"},
+            json={"prompt": "a small red apple on a white background", "aspect_ratio": "1:1", "rendering_speed": "TURBO", "num_images": 1},
+            timeout=60,
+        )
+        return jsonify({"ok": resp.ok, "status": resp.status_code, "body": resp.json()})
+    except Exception as e:
+        return jsonify({"ok": False, "error_type": type(e).__name__, "error": str(e)})
+
+
 def voice_tts(text, fallback_voice="onyx"):
     """Cloned voice first, falls back to OpenAI TTS if ElevenLabs is
     unavailable (missing key, quota, or network failure) so a live show
