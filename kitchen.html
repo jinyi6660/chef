@@ -642,15 +642,19 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText)
     video.playbackRate = Math.max(0.25, Math.min(4, naturalDuration / audioDuration));
   }
 
-  if (lineText) {
-    captionWrap.classList.add('on');
-    typewriteCaption(captionText, lineText, audioDuration * 1000);
-  } else {
-    captionWrap.classList.remove('on');
-  }
+  if (!lineText) captionWrap.classList.remove('on');
 
   if (!AUDIO_ONLY) { try { await video.play(); } catch {} }
   try { await audio.play(); } catch (err) { console.error('stage audio failed to play', err); }
+
+  // caption reveal must start after the voice actually starts, not
+  // before — it used to fire before audio.play() was even called, so the
+  // chef's words showed up on screen a beat ahead of anyone actually
+  // saying them
+  if (lineText) {
+    captionWrap.classList.add('on');
+    typewriteCaption(captionText, lineText, audioDuration * 1000);
+  }
 
   await new Promise(resolve => {
     audio.addEventListener('ended', resolve, { once: true });
