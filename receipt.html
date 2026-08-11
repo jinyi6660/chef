@@ -283,24 +283,40 @@ function startReceiptFlow() {
   pollUntilDone();
 }
 
+function _checkDoneOnce() {
+  fetch('/state').then(r => r.json()).then(data => {
+    _dbg(`pollUntilDone: showPhase=${data.showPhase}`);
+    if (data.showPhase === 'done') {
+      clearInterval(_pollTimer);
+      setTimeout(() => {
+        try {
+          showReceipt(data);
+        } catch (e) {
+          _dbg('showReceipt THREW: ' + e + '\n' + e.stack);
+        }
+      }, 900);
+    }
+  }).catch(e => _dbg('pollUntilDone fetch failed: ' + e));
+}
+
 function pollUntilDone() {
   clearInterval(_pollTimer);
-  _pollTimer = setInterval(() => {
-    fetch('/state').then(r => r.json()).then(data => {
-      _dbg(`pollUntilDone: showPhase=${data.showPhase}`);
-      if (data.showPhase === 'done') {
-        clearInterval(_pollTimer);
-        setTimeout(() => {
-          try {
-            showReceipt(data);
-          } catch (e) {
-            _dbg('showReceipt THREW: ' + e + '\n' + e.stack);
-          }
-        }, 900);
-      }
-    }).catch(e => _dbg('pollUntilDone fetch failed: ' + e));
-  }, 400); // was 2000, then 700 — matches order.html's tighter polling, less lag before the receipt updates
+  _pollTimer = setInterval(_checkDoneOnce, 400); // was 2000, then 700 — matches order.html's tighter polling, less lag before the receipt updates
 }
+
+// iOS Safari suspends timers/network on a backgrounded or locked tab —
+// if the guest's phone screen locked or they switched apps mid-show, the
+// 400ms interval above could just stop firing entirely until they come
+// back, leaving this page stuck on PROCESSING long after the order
+// actually finished. The moment the tab becomes visible again, check
+// immediately instead of waiting for the next (possibly long-delayed)
+// interval tick.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && _pollTimer !== null) {
+    _dbg('tab became visible again — checking immediately');
+    _checkDoneOnce();
+  }
+});
 
 // ── RECEIPT ──
 function esc(s) {
