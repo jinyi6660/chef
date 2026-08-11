@@ -944,7 +944,15 @@ async function runShow(state) {
   if (!AUDIO_ONLY) {
     const mv = document.getElementById('method-video');
     if (!mv.ended) {
-      await new Promise(resolve => mv.addEventListener('ended', resolve, { once: true }));
+      // unlike every other video wait in this file, this one had no
+      // 'error' listener and no timeout fallback — a real network blip
+      // or codec hiccup on the actual kitchen display would hang the
+      // entire show here forever with no recovery
+      await new Promise(resolve => {
+        mv.addEventListener('ended', resolve, { once: true });
+        mv.addEventListener('error', resolve, { once: true });
+        setTimeout(resolve, 45000);
+      });
     }
   }
   if (!recipeNarration.ended && !recipeNarration.paused) {
@@ -1003,7 +1011,11 @@ async function startDemo() {
   if (!AUDIO_ONLY) {
     const mv = document.getElementById('method-video');
     if (!mv.ended) {
-      await new Promise(resolve => mv.addEventListener('ended', resolve, { once: true }));
+      await new Promise(resolve => {
+        mv.addEventListener('ended', resolve, { once: true });
+        mv.addEventListener('error', resolve, { once: true });
+        setTimeout(resolve, 45000);
+      });
     }
   }
   const recipeNarrationDemo = document.getElementById('recipe-narration-audio');
