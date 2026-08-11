@@ -55,7 +55,7 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = "C5rrTayXl4m3QBraxgkY"  # cloned voice "jinyi"
-FAL_API_KEY = os.environ.get("FAL_KEY", "")  # second-layer image-gen fallback via fal.ai, used only if OpenAI's gpt-image-2 fails (e.g. org verification pending)
+FAL_API_KEY = os.environ.get("FAL_KEY", "").strip()  # second-layer image-gen fallback via fal.ai, used only if OpenAI's gpt-image-2 fails (e.g. org verification pending) — .strip() because a trailing newline pasted into Render's env var field breaks the Authorization header
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
