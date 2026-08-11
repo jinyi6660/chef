@@ -350,36 +350,32 @@ def extract_age_guess(chef1_line):
 def generate_dish_image_early(answers_text, age_guess):
     """Writes an imagePrompt for an actual birthday cake (not an abstract
     dish), topped with numeral candle(s) spelling out chef 1's age guess,
-    and generates the image via fal.ai. Kicked off right after chef 1's
-    turn in the relay (so the age guess exists yet), running in parallel
-    with chefs 2 and 3 rather than waiting for the full relay to finish.
+    and generates the image. Kicked off right after chef 1's turn in the
+    relay (so the age guess exists yet), running in parallel with chefs 2
+    and 3 rather than waiting for the full relay to finish.
 
-    Uses fal.ai (Ideogram v3) rather than OpenAI's gpt-image-2 — OpenAI
-    needs org identity verification (can be pending/stuck for hours) and
-    even once verified takes ~40s+ per call, versus fal.ai's ~10-15s with
-    no such gate. Retries up to 3 times before giving up — kitchen.html's
-    stage4 loading loop waits on hasImage becoming true, and a live show
-    has one shot at this, so a single transient API error shouldn't be
-    allowed to leave the image permanently missing."""
+    OpenAI's gpt-image-2 is preferred (better output quality, per direct
+    comparison) despite being slower (~40s+ per call) and needing org
+    identity verification (now confirmed working). fal.ai (Ideogram v3,
+    ~10-15s) is the second-layer fallback if OpenAI fails — same
+    image_prompt (from the guest's own answers) and same REFERENCE_IMAGES
+    get sent to whichever provider actually runs. Retries before giving
+    up — kitchen.html's stage4 loading loop waits on hasImage becoming
+    true, and a live show has one shot at this, so a single transient API
+    error shouldn't be allowed to leave the image permanently missing."""
     image_prompt = _write_image_prompt(answers_text, age_guess)
     if not image_prompt:
         display_state["image"] = None
         return
     display_state["imagePrompt"] = image_prompt
-    # fal.ai first — much faster (~10-15s) when it works, but has shown
-    # occasional unexplained failures (network/DNS blips reaching it from
-    # Render specifically). OpenAI is slower (~40s+) but its org
-    # verification is confirmed working now, so it's a solid second
-    # layer — same image_prompt (from the guest's own answers) and same
-    # REFERENCE_IMAGES get sent to whichever provider actually runs.
-    for attempt in range(2):
-        if _generate_dish_image_via_fal(image_prompt):
-            return
-    print("[image-gen] fal.ai failed — trying OpenAI as second-layer fallback", flush=True)
     for attempt in range(2):
         if _generate_dish_image_via_openai(image_prompt):
             return
-    print("[image-gen] all attempts (fal.ai + OpenAI) failed — giving up, hasImage will stay false", flush=True)
+    print("[image-gen] OpenAI failed — trying fal.ai as second-layer fallback", flush=True)
+    for attempt in range(2):
+        if _generate_dish_image_via_fal(image_prompt):
+            return
+    print("[image-gen] all attempts (OpenAI + fal.ai) failed — giving up, hasImage will stay false", flush=True)
     display_state["image"] = None
 
 
