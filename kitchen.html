@@ -317,6 +317,7 @@
 <audio id="relay-audio"></audio>
 <audio id="stage4-loop-audio" loop></audio>
 <audio id="stage4-end-audio"></audio>
+<audio id="chef-ack-audio" src="line_chef_ack.mp3"></audio>
 <audio id="stage123-ambient-audio" loop></audio>
 <audio id="reading-ambient-audio" src="reading_page_ambient.wav"></audio>
 <audio id="pageturn-audio" src="pageturn_sound.wav"></audio>
@@ -1131,6 +1132,10 @@ async function runShow(state) {
   }
   hideStage(); // book fades out for real, not just covered by the opaque video on top of it
   setPhase('COOKING');
+  // fills the recipe->chef1 transition with something instead of dead
+  // silence while postPhase/relay-data/video-loading catch up behind the
+  // scenes — fire-and-forget, doesn't add any extra wait of its own
+  document.getElementById('chef-ack-audio').play().catch(() => {});
   await postPhase('cooking');
   await playCookingStages();
 
