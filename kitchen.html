@@ -441,7 +441,18 @@ function revealStage() {
 
   if (!AUDIO_ONLY) {
     const mv = document.getElementById('method-video');
+    // this video has `autoplay` and no `loop`, so it's been running once
+    // on its own since the page first loaded — by the time we get here
+    // (well past 30s into greeting+page-turn), it's usually already
+    // finished and sitting paused on its OWN last frame (the fully
+    // revealed text), not frame 0. Just pausing and setting currentTime
+    // doesn't reliably un-stick an already-ended video in every browser —
+    // load() forces a real reset back to a clean, unplayed state before
+    // the currentTime skip below, so the "still frame" a guest briefly
+    // saw here was never a fresh complete recipe, it was leftover from
+    // this early autoplay pass finishing many seconds earlier.
     mv.pause();
+    mv.load();
     // the source file itself has ~4s of blank/transparent lead-in before
     // any text actually appears (confirmed by sampling frames) — skip
     // straight past it instead of sitting on an empty page for a while
