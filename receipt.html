@@ -289,13 +289,14 @@ function _checkDoneOnce() {
     if (data.showPhase === 'done') {
       _pollActive = false;
       clearInterval(_pollTimer);
-      setTimeout(() => {
-        try {
-          showReceipt(data);
-        } catch (e) {
-          console.error('showReceipt threw', e);
-        }
-      }, 900);
+      // used to hold here for 900ms before actually revealing the
+      // receipt — removed on request so it appears immediately once the
+      // cake does, not on a delay
+      try {
+        showReceipt(data);
+      } catch (e) {
+        console.error('showReceipt threw', e);
+      }
     }
   }).catch(() => { _checkInFlight = false; });
 }
