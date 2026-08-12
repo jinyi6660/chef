@@ -23,7 +23,7 @@ from PIL import Image, ImageDraw
 # call in a worker thread and give up waiting after N seconds regardless
 # — the orphaned thread eventually dies on its own, but nothing else is
 # ever blocked longer than the ceiling we set here.
-_HTTP_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+_HTTP_EXECUTOR = ThreadPoolExecutor(max_workers=16)  # raised from 4 now that TTS + persona-relay calls also route through this, not just image-gen
 
 
 def _call_with_hard_timeout(timeout_sec, func, *args, **kwargs):
@@ -156,9 +156,14 @@ def stt_route():
 
 
 def tts(text, voice):
-    """Speaks text with OpenAI TTS, returns base64 audio or None on failure."""
+    """Speaks text with OpenAI TTS, returns base64 audio or None on failure.
+    Wrapped in the same hard-timeout pattern as the image-gen calls — this
+    is the fallback voice_tts() reaches for when ElevenLabs fails, so if
+    THIS also hangs on a bad DNS lookup with no bound, a guest gets no
+    voice at all for however long that takes (seen live: 90s+)."""
     try:
-        speech = openai_client.audio.speech.create(
+        speech = _call_with_hard_timeout(
+            20, openai_client.audio.speech.create,
             model="tts-1",
             voice=voice,
             input=text,
@@ -179,7 +184,8 @@ def elevenlabs_tts(text):
     if not ELEVENLABS_API_KEY:
         return None
     try:
-        resp = requests.post(
+        resp = _call_with_hard_timeout(
+            15, requests.post,
             f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
             headers={
                 "xi-api-key": ELEVENLABS_API_KEY,
@@ -619,7 +625,8 @@ def call_persona(persona, context):
     for attempt in range(2):
         try:
             if persona["provider"] == "claude":
-                resp = client.messages.create(
+                resp = _call_with_hard_timeout(
+                    25, client.messages.create,
                     model="claude-opus-4-6",
                     max_tokens=320,
                     system=persona["system"],
@@ -627,7 +634,8 @@ def call_persona(persona, context):
                 )
                 return resp.content[0].text.strip()
             else:
-                resp = openai_client.chat.completions.create(
+                resp = _call_with_hard_timeout(
+                    25, openai_client.chat.completions.create,
                     model="gpt-4o",
                     max_tokens=320,
                     messages=[
