@@ -632,7 +632,11 @@ async function playSyncedStage(videoSrc, naturalDuration, audioBase64, lineText)
   await new Promise(resolve => {
     if (audio.readyState >= 1) return resolve();
     audio.addEventListener('loadedmetadata', resolve, { once: true });
-    setTimeout(resolve, 3000);
+    // this is a data: URI already fully in memory, not a network fetch —
+    // readyState normally reaches 1 almost instantly, so 3000ms was pure
+    // worst-case dead time (black screen between chefs) that was rarely
+    // actually needed
+    setTimeout(resolve, 500);
   });
   const audioDuration = (audio.duration && isFinite(audio.duration)) ? audio.duration : naturalDuration;
   if (!AUDIO_ONLY) {
