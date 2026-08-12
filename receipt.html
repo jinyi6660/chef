@@ -271,10 +271,19 @@ function startReceiptFlow() {
 
 let _pollActive = false;
 let _lastPollAttemptAt = 0;
+let _checkInFlight = false;
 
 function _checkDoneOnce() {
+  // on a slow/flaky connection, a fetch can still be pending when the
+  // next 400ms tick fires — without this guard, requests pile up on top
+  // of each other (all competing for the same limited bandwidth, making
+  // the slow connection even slower) and their responses can land out of
+  // order, which looked like the screen flickering between states
+  if (_checkInFlight) return;
+  _checkInFlight = true;
   _lastPollAttemptAt = Date.now();
   fetch('/state').then(r => r.json()).then(data => {
+    _checkInFlight = false;
     if (data.showPhase === 'done') {
       _pollActive = false;
       clearInterval(_pollTimer);
@@ -286,7 +295,7 @@ function _checkDoneOnce() {
         }
       }, 900);
     }
-  }).catch(() => {});
+  }).catch(() => { _checkInFlight = false; });
 }
 
 function pollUntilDone() {
