@@ -776,19 +776,23 @@ async function playLoadingStage(videoSrc, isDone) {
 }
 
 async function playCookingStages() {
-  // relay runs before dish generation server-side, so lines should
-  // already be there by now — poll briefly just in case. This is dead
-  // time on screen (book already hidden, first stage video not up yet),
-  // but today's other speedups (faster page-turn, faster reading phase)
-  // shortened the head start relay gets before this point, so err on the
-  // side of more patience here — missing the AI chefs' commentary
-  // entirely is worse than a few extra seconds of black screen.
-  let lines = [];
-  for (let i = 0; i < 15; i++) {
-    const d = await pollState();
-    lines = (d && d.relayLines) || [];
-    if (lines.length >= 3) break;
-    await sleep(400);
+  // the reading phase already confirmed this in the background (see
+  // runShow()) whenever possible — if it landed in time, skip straight
+  // past the wait below entirely, no dead time on screen for it at all.
+  let lines = _prefetchedRelayLines || [];
+  // fallback: the background check above hadn't found anything yet
+  // (rare — relay itself was unusually slow) — poll briefly just in
+  // case. This is dead time on screen (book already hidden, first stage
+  // video not up yet), but missing the AI chefs' commentary entirely is
+  // worse than a few extra seconds of black screen, so err on the side
+  // of patience here rather than giving up quickly.
+  if (lines.length < 3) {
+    for (let i = 0; i < 15; i++) {
+      const d = await pollState();
+      lines = (d && d.relayLines) || [];
+      if (lines.length >= 3) break;
+      await sleep(400);
+    }
   }
   if (!lines.length) console.warn('playCookingStages: no relayLines yet in /state');
 
@@ -977,6 +981,12 @@ async function playIdlePageTurn() {
 // different ts) starts the next show
 let lastOrderTs = null;
 
+// populated in the background during the reading phase (plenty of idle
+// time there) so playCookingStages() can skip its own wait entirely if
+// the relay is already confirmed ready by the time cooking starts —
+// see the prefetch block in runShow()'s reading phase.
+let _prefetchedRelayLines = null;
+
 async function pollForOrder() {
   resetDisplay();
   hideStage();
@@ -1058,6 +1068,21 @@ async function runShow(state) {
   // the later stage videos get prefetched individually, staggered, once
   // the cooking stages actually begin (see playCookingStages()).
   if (!AUDIO_ONLY) fetch(STAGE_VIDEOS[0]).catch(() => {});
+  // also use the reading phase's spare time to confirm the AI chefs'
+  // relay dialogue is ready, so playCookingStages() doesn't need to wait
+  // for it itself later (that wait was made intentionally generous, up
+  // to 6s, specifically so the dialogue never gets skipped — checking
+  // for it early here means cooking usually starts with zero extra
+  // delay instead, without giving up any of that reliability margin).
+  _prefetchedRelayLines = null;
+  (async () => {
+    for (let i = 0; i < 30; i++) {
+      const d = await pollState();
+      const lines = (d && d.relayLines) || [];
+      if (lines.length >= 3) { _prefetchedRelayLines = lines; return; }
+      await sleep(1000);
+    }
+  })();
   const readingStart = Date.now();
   let cur = state;
   // the backend now always falls back to plain-word tags on its own AI
