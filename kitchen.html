@@ -1064,10 +1064,19 @@ async function runShow(state) {
   // competing for bandwidth at the exact moment the recipe narration also
   // needed to load, and on a constrained connection that starved the
   // narration for a good ~30s of silence before it could actually start
-  // playing. Only prefetch the one thing that's actually needed next;
-  // the later stage videos get prefetched individually, staggered, once
-  // the cooking stages actually begin (see playCookingStages()).
-  if (!AUDIO_ONLY) fetch(STAGE_VIDEOS[0]).catch(() => {});
+  // playing. Only prefetch stage1 immediately; the rest are staggered a
+  // few seconds apart (still here, during reading's spare time) instead
+  // of waiting until the cooking stages actually begin — starting each
+  // one only when the PREVIOUS stage began playing gave it just that
+  // stage's own duration (often well under 15s) to finish downloading,
+  // which wasn't always enough lead time and left a visible wait before
+  // the next chef's video/voice.
+  if (!AUDIO_ONLY) {
+    fetch(STAGE_VIDEOS[0]).catch(() => {});
+    setTimeout(() => fetch(STAGE_VIDEOS[1]).catch(() => {}), 6000);
+    setTimeout(() => fetch(STAGE_VIDEOS[2]).catch(() => {}), 12000);
+    setTimeout(() => fetch(LOADING_VIDEO).catch(() => {}), 18000);
+  }
   // also use the reading phase's spare time to confirm the AI chefs'
   // relay dialogue is ready, so playCookingStages() doesn't need to wait
   // for it itself later (that wait was made intentionally generous, up
