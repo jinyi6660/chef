@@ -225,24 +225,6 @@
   }
   #dish-reveal.on { opacity: 1; }
 
-  /* guaranteed-visible text during the stage4 image-generation wait —
-     the loading video/audio for this beat can silently fail to play
-     (autoplay quirk, a file that didn't cache in time, etc.), and when
-     that happens there was nothing else on screen at all: no picture, no
-     sound, for however long generation takes (can be a minute+). This is
-     independent of the video, so the guest always sees SOMETHING moving
-     during that wait even in the worst case. */
-  #loading-text {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    z-index: 815; color: rgba(255,255,255,0.85);
-    font-family: 'Courier Prime', monospace; font-size: 20px; letter-spacing: 0.08em;
-    text-shadow: 0 0 10px rgba(255,255,255,0.5);
-    opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
-  }
-  #loading-text.on { opacity: 1; }
-  .ld-dots::after { content: ''; display: inline-block; width: 1.2em; text-align: left; animation: ld-dots-anim 1.4s steps(4) infinite; }
-  @keyframes ld-dots-anim { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
-
   /* captions the three chefs' relay commentary during stage1-3, in case
      the spoken audio is hard to hear in the exhibition space — a
      full-width banner that slides in from the left edge for each line
@@ -290,7 +272,6 @@
   <img id="idle-cover" alt="">
   <div id="idle-dim"></div>
   <img id="dish-reveal" alt="">
-  <div id="loading-text">Preparing your cake<span class="ld-dots"></span></div>
   <div id="relay-caption-wrap"><div id="relay-caption"></div></div>
 
   <div id="book">
@@ -726,8 +707,6 @@ function revealDishImage(reveal, src) {
 
 async function playLoadingStage(videoSrc, isDone) {
   const video = document.getElementById('show-video');
-  const loadingText = document.getElementById('loading-text');
-  loadingText.classList.add('on');
   if (!AUDIO_ONLY) {
     video.src = videoSrc;
     video.loop = true;
@@ -760,7 +739,6 @@ async function playLoadingStage(videoSrc, isDone) {
 
   loopAudio.pause();
   loopAudio.loop = false;
-  loadingText.classList.remove('on');
   const endAudio = document.getElementById('stage4-end-audio');
   endAudio.src = 'stage4_end.wav';
   endAudio.play().catch(() => {});
@@ -1158,7 +1136,6 @@ async function runShow(state) {
     // playing into the fallback/cooking/done phases that follow
     ['pageturn-audio', 'reading-ambient-audio', 'recipe-narration-audio', 'relay-audio', 'stage123-ambient-audio']
       .forEach(id => { const el = document.getElementById(id); if (el) el.pause(); });
-    document.getElementById('loading-text').classList.remove('on');
     revealDishImage(document.getElementById('dish-reveal'), 'fallback_cake.jpg');
   }
 
