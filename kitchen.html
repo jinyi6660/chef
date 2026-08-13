@@ -269,6 +269,8 @@
   <img id="bg" src="back.jpg" alt="">
 
   <video id="show-video" muted playsinline></video>
+  <video id="preload-video-a" muted playsinline preload="auto" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;"></video>
+  <video id="preload-video-b" muted playsinline preload="auto" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;"></video>
   <img id="idle-cover" alt="">
   <div id="idle-dim"></div>
   <img id="dish-reveal" alt="">
@@ -364,6 +366,21 @@ const SKIP_PAGE_TURN = false;
 // ── UTILS ─────────────────────────────────────────────────────
 const sleep    = ms => new Promise(r => setTimeout(r, ms));
 const setPhase = s  => document.getElementById('bar-phase').textContent = s;
+
+// warms the browser's cache for a video file using an actual hidden
+// <video> element rather than fetch() — a <video> typically issues
+// Range-based requests to support seeking, while a plain fetch() doesn't,
+// and those can land in different cache entries in some browsers. Using
+// a real video element for the preload guarantees the same request shape
+// as the real playback later, so the cache actually gets hit instead of
+// silently re-downloading from scratch when show-video's src is set.
+let _preloadToggle = false;
+function preloadVideo(src) {
+  _preloadToggle = !_preloadToggle;
+  const el = document.getElementById(_preloadToggle ? 'preload-video-a' : 'preload-video-b');
+  el.src = src;
+  el.load();
+}
 
 setInterval(() => {
   document.getElementById('bar-clock').textContent =
@@ -801,7 +818,7 @@ async function playCookingStages() {
     // its own line's audio duration (often 10s+) to let this finish
     // quietly in the background before it's actually needed.
     const next = STAGE_VIDEOS[i + 1] || LOADING_VIDEO;
-    if (!AUDIO_ONLY && next) fetch(next).catch(() => {});
+    if (!AUDIO_ONLY && next) preloadVideo(next);
     const line = lines[i];
     await playSyncedStage(STAGE_VIDEOS[i], STAGE_DURATIONS[i], line && line.audio, line && line.text);
   }
@@ -1023,10 +1040,10 @@ async function runShow(state) {
   // network. Staggered a few seconds apart so they don't all compete
   // with each other or with the recipe narration for bandwidth at once.
   if (!AUDIO_ONLY) {
-    fetch(STAGE_VIDEOS[0]).catch(() => {});
-    setTimeout(() => fetch(STAGE_VIDEOS[1]).catch(() => {}), 8000);
-    setTimeout(() => fetch(STAGE_VIDEOS[2]).catch(() => {}), 16000);
-    setTimeout(() => fetch(LOADING_VIDEO).catch(() => {}), 24000);
+    preloadVideo(STAGE_VIDEOS[0]);
+    setTimeout(() => preloadVideo(STAGE_VIDEOS[1]), 8000);
+    setTimeout(() => preloadVideo(STAGE_VIDEOS[2]), 16000);
+    setTimeout(() => preloadVideo(LOADING_VIDEO), 24000);
   }
 
   // 1 — AI waiter announces the order (back1.mp4 still sitting on its
