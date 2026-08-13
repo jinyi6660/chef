@@ -650,10 +650,16 @@ def call_persona(persona, context):
                 return ""
 
 
-def run_persona_relay(answers_text):
+def run_persona_relay(answers_text, on_first_turn=None):
     """Runs the 2-3 persona relay sequentially, across both Claude and
     OpenAI, updating display_state["relayLines"] after each turn so the
     display can show lines landing one at a time instead of all at once.
+
+    on_first_turn(line), if given, fires right after chef 1's line is
+    ready (their line is what the cake's candle-number age guess is
+    extracted from) — used so image generation can start with the real
+    guess instead of a hardcoded default, without waiting for chefs 2
+    and 3 too.
 
     Always appends exactly one relayLines entry per persona, even on
     failure (empty text/audio) — kitchen.html maps STAGE_VIDEOS[i] to
@@ -662,7 +668,7 @@ def run_persona_relay(answers_text):
     display_state["relayLines"] = []
     transcript = ""
 
-    for persona in PERSONAS:
+    for idx, persona in enumerate(PERSONAS):
         context = f"Guest's food memory answers:\n{answers_text}"
         if transcript:
             context += f"\n\nWhat's been said so far:\n{transcript}"
@@ -675,6 +681,8 @@ def run_persona_relay(answers_text):
         ]
         if line:
             transcript += ("\n\n" if transcript else "") + line
+        if idx == 0 and on_first_turn:
+            on_first_turn(line)
 
     return transcript
 
@@ -794,19 +802,23 @@ def build_dish():
         daemon=True
     ).start()
 
-    # Image generation used to wait for chef 1's turn in the relay (for
-    # their age guess, used for the candle count) before starting — that
-    # meant it wasn't actually running from the moment the guest hit
-    # submit. It now kicks off immediately, in parallel with the relay
-    # from t=0, using the same default age (25) extract_age_guess() would
-    # fall back to anyway when nothing usable is found — losing a little
-    # personalization on the candle count in exchange for the image
-    # having the maximum possible head start.
-    threading.Thread(
-        target=generate_dish_image_early,
-        args=(answers_text, extract_age_guess("")),
-        daemon=True
-    ).start()
+    # Image generation waits for chef 1's turn in the relay (for their age
+    # guess, used for the candle count) before starting, so the cake shows
+    # a real number instead of always defaulting to 25 — a request kicked
+    # off as soon as that one turn lands, not the full 3-persona relay,
+    # keeps most of today's earlier "start it as early as possible" win
+    # while still getting a personalized candle count.
+    image_kicked_off = threading.Event()
+
+    def kickoff_image(chef1_line):
+        if image_kicked_off.is_set():
+            return
+        image_kicked_off.set()
+        threading.Thread(
+            target=generate_dish_image_early,
+            args=(answers_text, extract_age_guess(chef1_line)),
+            daemon=True
+        ).start()
 
     # Three AI voices (mixing Claude + OpenAI) speculate about the guest in
     # relay, each building on the last. The transcript then feeds the final
@@ -817,9 +829,12 @@ def build_dish():
     # take the whole order down with an unhandled 500 — kitchen.html's
     # own "no relayLines yet" warning is only a soft skip, so make sure
     # this can never throw all the way out and abort everything after it.
+    # If it crashes before chef 1's turn ever completes, kick the image
+    # off anyway (with the default age) rather than losing it entirely.
     try:
-        relay_transcript = run_persona_relay(answers_text)
+        relay_transcript = run_persona_relay(answers_text, on_first_turn=kickoff_image)
     except Exception as e:
+        kickoff_image("")
         print(f"[persona relay CRASHED] {type(e).__name__}: {e}", flush=True)
         relay_transcript = ""
         if not display_state.get("relayLines"):
