@@ -1016,6 +1016,19 @@ async function runShow(state) {
   // back to, instead of hanging here silently with no explanation.
   try {
 
+  // start warming the browser's cache for the cooking-stage videos as
+  // early as possible — the whole rest of the show (greeting, page-turn,
+  // reading) is several minutes of head start before any of these are
+  // actually needed, which matters a lot on a slow/congested venue
+  // network. Staggered a few seconds apart so they don't all compete
+  // with each other or with the recipe narration for bandwidth at once.
+  if (!AUDIO_ONLY) {
+    fetch(STAGE_VIDEOS[0]).catch(() => {});
+    setTimeout(() => fetch(STAGE_VIDEOS[1]).catch(() => {}), 8000);
+    setTimeout(() => fetch(STAGE_VIDEOS[2]).catch(() => {}), 16000);
+    setTimeout(() => fetch(LOADING_VIDEO).catch(() => {}), 24000);
+  }
+
   // 1 — AI waiter announces the order (back1.mp4 still sitting on its
   // standby frame from idle)
   setPhase('GREETING');
@@ -1049,24 +1062,10 @@ async function runShow(state) {
   // the browser had to start that fetch from scratch, leaving a beat of
   // blank video before any frame was actually decoded.
   //
-  // this used to also prefetch stage22/stage33/stage44 (the LOADING_VIDEO)
-  // all at the same time, right here — but that meant 4 video downloads
-  // competing for bandwidth at the exact moment the recipe narration also
-  // needed to load, and on a constrained connection that starved the
-  // narration for a good ~30s of silence before it could actually start
-  // playing. Only prefetch stage1 immediately; the rest are staggered a
-  // few seconds apart (still here, during reading's spare time) instead
-  // of waiting until the cooking stages actually begin — starting each
-  // one only when the PREVIOUS stage began playing gave it just that
-  // stage's own duration (often well under 15s) to finish downloading,
-  // which wasn't always enough lead time and left a visible wait before
-  // the next chef's video/voice.
-  if (!AUDIO_ONLY) {
-    fetch(STAGE_VIDEOS[0]).catch(() => {});
-    setTimeout(() => fetch(STAGE_VIDEOS[1]).catch(() => {}), 6000);
-    setTimeout(() => fetch(STAGE_VIDEOS[2]).catch(() => {}), 12000);
-    setTimeout(() => fetch(LOADING_VIDEO).catch(() => {}), 18000);
-  }
+  // stage1/22/33/44 prefetching now happens much earlier, from the
+  // greeting phase (see top of runShow()) — a slow/school-WiFi connection
+  // needs more than reading's ~30s alone to finish 4 video downloads, so
+  // give it the whole rest of the show as head start instead.
   // also use the reading phase's spare time to confirm the AI chefs'
   // relay dialogue is ready, so playCookingStages() doesn't need to wait
   // for it itself later (that wait was made intentionally generous, up
