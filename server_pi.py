@@ -20,16 +20,28 @@ from PIL import Image, ImageDraw
 # NOT cover a hung DNS lookup, which is what fal.ai calls from Render's
 # network have been observed to do (a request with timeout=60 sat with
 # zero response, not even an error, for 80+ seconds). Route calls that
-# need a hard ceiling through this executor instead: run the blocking
-# call in a worker thread and give up waiting after N seconds regardless
-# — the orphaned thread eventually dies on its own, but nothing else is
-# ever blocked longer than the ceiling we set here.
-_HTTP_EXECUTOR = ThreadPoolExecutor(max_workers=16)  # raised from 4 now that TTS + persona-relay calls also route through this, not just image-gen
-
-
+# need a hard ceiling through this instead: run the blocking call in a
+# worker thread and give up waiting after N seconds regardless — the
+# orphaned thread eventually dies on its own (or never does, for a truly
+# hung DNS lookup).
+#
+# this used to submit to ONE shared, module-level ThreadPoolExecutor —
+# but a permanently-hung call leaves its worker thread permanently
+# occupied too (Python can't force-kill a thread), and a shared pool has
+# a fixed number of workers. After enough of these accumulated over a
+# long live session, the shared pool's workers were ALL wedged and new
+# calls had nothing free to actually run on — every later call then
+# looked "hung" too even though each one's own timeout should have
+# bounded it individually. A fresh, throwaway single-worker executor per
+# call means a stuck call only ever poisons its own disposable pool,
+# never affects any other call.
 def _call_with_hard_timeout(timeout_sec, func, *args, **kwargs):
-    future = _HTTP_EXECUTOR.submit(func, *args, **kwargs)
-    return future.result(timeout=timeout_sec)
+    executor = ThreadPoolExecutor(max_workers=1)
+    try:
+        future = executor.submit(func, *args, **kwargs)
+        return future.result(timeout=timeout_sec)
+    finally:
+        executor.shutdown(wait=False)
 
 app = Flask(__name__)
 CORS(app)
@@ -277,15 +289,14 @@ def thread_debug():
     """Diagnostic route — the whole site (even a plain /state read) was
     observed responding in 3-9s instead of instantly, well after any
     order finished generating, suggesting something is still occupying
-    the process in the background. Reports live thread counts and the
-    hard-timeout executor's queue so a stuck/leaked background call can
-    actually be seen instead of guessed at."""
+    the process in the background. Reports live thread counts so a
+    stuck/leaked background call can actually be seen instead of guessed
+    at. (No longer reports a shared executor's queue — hard-timeout calls
+    each get their own throwaway executor now, see _call_with_hard_timeout.)"""
     threads = threading.enumerate()
     return jsonify({
         "active_thread_count": len(threads),
         "thread_names": [t.name for t in threads],
-        "http_executor_queue_size": _HTTP_EXECUTOR._work_queue.qsize(),
-        "http_executor_max_workers": _HTTP_EXECUTOR._max_workers,
     })
 
 
