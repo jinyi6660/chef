@@ -357,9 +357,9 @@ function randomPlatePos() {
 // standby frame from the moment kitchen.html loads (whether or not an
 // order has come in yet), and only starts actually playing once a guest
 // submits — then it plays through once, before the paper book is revealed.
-const PAGE_TURN_VIDEO_SRC = 'back2.mp4'; // re-exported at 1834x866 to match the new stage-window ratio
-const PAGE_TURN_FILE_DURATION_SEC = 32.04; // back2.mp4's real, unsped length
-const PAGE_TURN_PLAYBACK_RATE = 1.8; // sped up further — 1.4x still felt too slow
+const PAGE_TURN_VIDEO_SRC = 'back3.mp4'; // replaces back2.mp4 — already cut to the right pace, no artificial speedup needed
+const PAGE_TURN_FILE_DURATION_SEC = 14.65; // back3.mp4's real length
+const PAGE_TURN_PLAYBACK_RATE = 1; // natural speed — back3.mp4 was made to already play at the right pace
 const PAGE_TURN_DURATION_SEC = PAGE_TURN_FILE_DURATION_SEC / PAGE_TURN_PLAYBACK_RATE; // used to time audio-only mode without loading the file at all
 const SKIP_PAGE_TURN = false;
 
